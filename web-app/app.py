@@ -14,13 +14,6 @@ from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
-
 # 关键补丁: 保证 scripts/ 在包路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
@@ -225,30 +218,38 @@ def execute_script(task_id):
             return False
 
 def execute_selenium_script(task_id):
-    # 正确导入
-    from scripts.task_executor import SeleniumIDEExecutor
+    from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification
     with app.app_context():
         task = db.session.get(Task, task_id)
         if not task:
             return False
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         executor = SeleniumIDEExecutor(task.script_path)
         success, message = executor.execute()
+        if bot_token and chat_id:
+            send_telegram_notification(task.name, success, message, bot_token, chat_id)
         return success
 
 def execute_actiona_script(script_path):
     try:
+        bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+        chat_id = os.environ.get('TELEGRAM_CHAT_ID')
         result = subprocess.run(
             ['/usr/local/bin/actiona', '-s', script_path],
             capture_output=True,
             text=True,
             timeout=300
         )
-        if result.returncode == 0:
+        success = result.returncode == 0
+        if success:
             logger.info("Actiona脚本执行成功")
-            return True
         else:
             logger.error(f"Actiona脚本执行失败: {result.stderr}")
-            return False
+        if bot_token and chat_id:
+            from scripts.task_executor import send_telegram_notification
+            send_telegram_notification(Path(script_path).name, success, result.stdout + result.stderr, bot_token, chat_id)
+        return success
     except Exception as e:
         logger.error(f"执行Actiona脚本异常: {e}")
         return False
