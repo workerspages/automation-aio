@@ -61,32 +61,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 安装Actiona AppImage及解压，避免FUSE问题
+# 安装 Actiona AppImage，不解压，直接使用 AppImage 文件
 RUN mkdir -p /opt/actiona && \
     wget -O /opt/actiona/actiona.AppImage https://github.com/Jmgr/actiona/releases/download/v3.11.1/actiona-3.11.1-x86_64.AppImage && \
     chmod +x /opt/actiona/actiona.AppImage && \
-    cd /opt/actiona && \
-    ./actiona.AppImage --appimage-extract && \
-    chmod +x /opt/actiona/squashfs-root/AppRun && \
-    ln -s /opt/actiona/squashfs-root/AppRun /usr/local/bin/actiona
+    ln -s /opt/actiona/actiona.AppImage /usr/local/bin/actiona
 
-# 创建目录，移除chmod操作，权限应在宿主机设置
+# 创建必要目录，权限设置应由宿主机控制，避免容器内 chmod
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
 
-# 创建Python虚拟环境
+# 创建 Python 虚拟环境
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
 
 RUN pip install --no-cache-dir wheel setuptools && \
-    pip install --no-cache-dir Flask==3.0.0 Flask-Login==0.6.3 Flask-SQLAlchemy==3.1.1 APScheduler==3.10.4 requests==2.31.0 selenium==4.15.2 cryptography==41.0.7 python-telegram-bot==20.7
+    pip install --no-cache-dir -r /app/web-app/requirements.txt
 
 COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 
-# 安装Firefox扩展
+# 安装 Firefox 扩展
 RUN mkdir -p /usr/lib/firefox/distribution && \
     cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ && \
     echo '{' > /usr/lib/firefox/distribution/policies.json && \
