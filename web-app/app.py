@@ -1,23 +1,28 @@
+import os
+import sys
+import json
+import logging
+import time
+import random
+import subprocess
+from datetime import datetime
+from pathlib import Path
+
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from datetime import datetime
-import os
-import json
-import requests
-from pathlib import Path
-import subprocess
-import logging
-import time
-import random
+
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
+
+# 关键补丁: 保证 scripts/ 在包路径
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-this')
@@ -53,6 +58,11 @@ class Task(db.Model):
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
+
+@app.errorhandler(Exception)
+def handle_error(e):
+    logger.exception(e)
+    return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/')
 def index():
@@ -109,18 +119,29 @@ def get_available_scripts():
 def manage_tasks():
     if request.method == 'POST':
         data = request.json
-        task = Task(name=data['name'], script_path=data['script_path'],
-                    cron_expression=data['cron_expression'], enabled=data.get('enabled', True))
+        task = Task(
+            name=data['name'],
+            script_path=data['script_path'],
+            cron_expression=data['cron_expression'],
+            enabled=data.get('enabled', True)
+        )
         db.session.add(task)
         db.session.commit()
         if task.enabled:
             schedule_task(task)
         return jsonify({'success': True, 'task_id': task.id})
     tasks = Task.query.all()
-    return jsonify([{'id': t.id, 'name': t.name, 'script_path': t.script_path,
-                     'cron_expression': t.cron_expression, 'enabled': t.enabled,
-                     'last_run': t.last_run.isoformat() if t.last_run else None,
-                     'last_status': t.last_status} for t in tasks])
+    return jsonify([
+        {
+            'id': t.id,
+            'name': t.name,
+            'script_path': t.script_path,
+            'cron_expression': t.cron_expression,
+            'enabled': t.enabled,
+            'last_run': t.last_run.isoformat() if t.last_run else None,
+            'last_status': t.last_status
+        } for t in tasks
+    ])
 
 @app.route('/api/tasks/<int:task_id>', methods=['GET', 'PUT', 'DELETE'])
 @login_required
@@ -129,10 +150,15 @@ def update_task(task_id):
     if not task:
         return jsonify({'error': 'Task not found'}), 404
     if request.method == 'GET':
-        return jsonify({'id': task.id, 'name': task.name, 'script_path': task.script_path,
-                        'cron_expression': task.cron_expression, 'enabled': task.enabled,
-                        'last_run': task.last_run.isoformat() if task.last_run else None,
-                        'last_status': task.last_status})
+        return jsonify({
+            'id': task.id,
+            'name': task.name,
+            'script_path': task.script_path,
+            'cron_expression': task.cron_expression,
+            'enabled': task.enabled,
+            'last_run': task.last_run.isoformat() if task.last_run else None,
+            'last_status': task.last_status
+        })
     if request.method == 'DELETE':
         try:
             scheduler.remove_job(f'task_{task_id}')
@@ -168,8 +194,13 @@ def schedule_task(task):
     if task.enabled:
         try:
             trigger = CronTrigger.from_crontab(task.cron_expression)
-            scheduler.add_job(func=execute_script, trigger=trigger,
-                              id=f'task_{task.id}', args=[task.id], replace_existing=True)
+            scheduler.add_job(
+                func=execute_script,
+                trigger=trigger,
+                id=f'task_{task.id}',
+                args=[task.id],
+                replace_existing=True
+            )
             logger.info(f'任务 {task.name} (ID: {task.id}) 已调度')
         except Exception as e:
             logger.error(f'调度任务失败: {e}')
@@ -183,14 +214,14 @@ def execute_script(task_id):
         if script_path.endswith('.side'):
             return execute_selenium_script(task_id)
         elif script_path.endswith('.a5s'):
-            return execute_actiona_script(script_path)
+            return execute_actiona_script(task.script_path)
         else:
             logger.error(f"不支持的脚本类型: {script_path}")
             return False
 
 def execute_selenium_script(task_id):
-    # 请替换为你完整的 Selenium 执行器逻辑代码
-    from selenium_executor import SeleniumIDEExecutor
+    # 正确导入
+    from scripts.task_executor import SeleniumIDEExecutor
     with app.app_context():
         task = db.session.get(Task, task_id)
         if not task:
