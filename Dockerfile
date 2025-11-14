@@ -60,15 +60,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     autokey-common \
     python3-gi \
     gir1.2-gtk-3.0 \
+    xvfb \
+    tigervnc-standalone-server \
+    tigervnc-xorg-extension \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 创建必须目录，权限交给宿主机控制
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
 
-# 创建Python虚拟环境
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
@@ -81,7 +82,6 @@ COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
 
-# 安装Firefox扩展
 RUN mkdir -p /usr/lib/firefox/distribution && \
     cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ && \
     echo '{' > /usr/lib/firefox/distribution/policies.json && \
