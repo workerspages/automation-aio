@@ -2,12 +2,15 @@
 """
 Selenium IDE任务执行器
 用于执行.side格式的Selenium脚本文件
+支持可视化执行和反机器人检测
 """
 
 import sys
 import json
 import time
+import random
 import logging
+import os
 from pathlib import Path
 from datetime import datetime
 from selenium import webdriver
@@ -30,8 +33,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 人类化操作配置
+HUMAN_LIKE_DELAYS = {
+    'min_command_delay': 0.5,
+    'max_command_delay': 2.0,
+    'min_typing_delay': 0.05,
+    'max_typing_delay': 0.15,
+    'scroll_delay': 0.5,
+    'click_delay': 0.3
+}
+
 class SeleniumIDEExecutor:
-    """Selenium IDE脚本执行器"""
+    """Selenium IDE脚本执行器 - 可视化模式"""
     
     def __init__(self, script_path):
         self.script_path = script_path
@@ -39,19 +52,50 @@ class SeleniumIDEExecutor:
         self.variables = {}
         
     def setup_driver(self):
-        """初始化WebDriver"""
+        """初始化WebDriver - 可视化模式，支持反检测"""
         try:
             options = Options()
+            
+            # 不使用无头模式 - 在VNC中可见
+            # options.add_argument('--headless')  # 注释掉
+            
             options.add_argument('--no-sandbox')
             options.add_argument('--disable-dev-shm-usage')
+            options.add_argument('--disable-blink-features=AutomationControlled')
             options.set_preference('intl.accept_languages', 'zh-CN')
             
-            # 如果需要无头模式
-            # options.add_argument('--headless')
+            # 反检测配置
+            options.set_preference('dom.webdriver.enabled', False)
+            options.set_preference('useAutomationExtension', False)
+            options.set_preference('general.useragent.override', 
+                                 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+            
+            # 使用 VNC 的显示服务器
+            os.environ['DISPLAY'] = ':1'
             
             self.driver = webdriver.Firefox(options=options)
             self.driver.implicitly_wait(10)
-            logger.info("WebDriver初始化成功")
+            
+            # 执行反检测脚本
+            self.driver.execute_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+                
+                window.navigator.chrome = {
+                    runtime: {}
+                };
+                
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+                
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['zh-CN', 'zh', 'en']
+                });
+            """)
+            
+            logger.info("WebDriver初始化成功（可视化模式 + 反检测）")
             return True
         except Exception as e:
             logger.error(f"WebDriver初始化失败: {e}")
@@ -68,13 +112,25 @@ class SeleniumIDEExecutor:
             logger.error(f"加载脚本失败: {e}")
             return None
     
+    def human_delay(self, min_delay=None, max_delay=None):
+        """添加人类化随机延迟"""
+        if min_delay is None:
+            min_delay = HUMAN_LIKE_DELAYS['min_command_delay']
+        if max_delay is None:
+            max_delay = HUMAN_LIKE_DELAYS['max_command_delay']
+        delay = random.uniform(min_delay, max_delay)
+        time.sleep(delay)
+    
     def execute_command(self, command):
-        """执行单个命令"""
+        """执行单个命令 - 带人类化操作"""
         cmd = command.get('command', '')
         target = command.get('target', '')
         value = command.get('value', '')
         
         try:
+            # 命令执行前的随机延迟
+            self.human_delay()
+            
             # 替换变量
             target = self.replace_variables(target)
             value = self.replace_variables(value)
@@ -86,16 +142,30 @@ class SeleniumIDEExecutor:
             
             elif cmd == 'click':
                 element = self.find_element(target)
-                element.click()
+                # 滚动到元素可见
+                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
+                time.sleep(HUMAN_LIKE_DELAYS['scroll_delay'])
+                # 移动到元素上
+                ActionChains(self.driver).move_to_element(element).pause(HUMAN_LIKE_DELAYS['click_delay']).click().perform()
             
             elif cmd == 'type':
                 element = self.find_element(target)
                 element.clear()
-                element.send_keys(value)
+                time.sleep(0.2)
+                # 逐字输入，模拟人类打字
+                for char in value:
+                    element.send_keys(char)
+                    time.sleep(random.uniform(
+                        HUMAN_LIKE_DELAYS['min_typing_delay'],
+                        HUMAN_LIKE_DELAYS['max_typing_delay']
+                    ))
             
             elif cmd == 'sendKeys':
                 element = self.find_element(target)
-                element.send_keys(value)
+                # 逐字输入
+                for char in value:
+                    element.send_keys(char)
+                    time.sleep(random.uniform(0.05, 0.15))
             
             elif cmd == 'select':
                 from selenium.webdriver.support.select import Select
@@ -150,6 +220,13 @@ class SeleniumIDEExecutor:
             
             elif cmd == 'close':
                 self.driver.close()
+            
+            elif cmd == 'runScript':
+                self.driver.execute_script(target)
+            
+            elif cmd == 'setWindowSize':
+                sizes = value.split('x')
+                self.driver.set_window_size(int(sizes[0]), int(sizes[1]))
             
             else:
                 logger.warning(f"未知命令: {cmd}")
@@ -214,6 +291,10 @@ class SeleniumIDEExecutor:
                     if not self.execute_command(command):
                         error_msg = f"命令执行失败 (第{i+1}条): {command.get('command')}"
                         return False, error_msg
+            
+            # 任务完成后保持浏览器打开一段时间（便于观察）
+            logger.info("任务执行完成，浏览器将在5秒后关闭")
+            time.sleep(5)
             
             duration = (datetime.now() - start_time).total_seconds()
             logger.info(f"脚本执行成功，耗时: {duration:.2f}秒")
