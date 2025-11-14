@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  ubuntu-automation:
+    # 使用构建好的镜像
+    image: ghcr.io/workerspages/ubuntu-automation:latest
+    # 或者本地构建
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
+    
+    container_name: ubuntu-automation
+    hostname: automation-server
+    
+    # 端口映射
+    ports:
+      - "5000:5000"    # Web管理界面
+      - "5901:5901"    # VNC端口
+      - "6901:6901"    # noVNC Web端口
+    
+    # 环境变量配置
+    environment:
+      # VNC配置
+      - VNC_PW=password123                    # VNC密码
+      - VNC_RESOLUTION=1920x1080              # VNC分辨率
+      - VNC_COL_DEPTH=24                      # 颜色深度
+      
+      # Web应用配置
+      - SECRET_KEY=your-super-secret-key-change-this-in-production
+      - FLASK_ENV=production
+      - FLASK_DEBUG=false
+      
+      # Telegram通知配置
+      - TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz    # 替换为你的Bot Token
+      - TELEGRAM_CHAT_ID=-1001234567890                            # 替换为你的Chat ID
+      
+      # 时区配置
+      - TZ=Asia/Shanghai
+      - LANG=zh_CN.UTF-8
+      - LANGUAGE=zh_CN:zh
+      - LC_ALL=zh_CN.UTF-8
+      
+      # 数据库配置
+      - DATABASE_URL=sqlite:////app/data/tasks.db
+      
+      # 调度器配置
+      - SCHEDULER_TIMEZONE=Asia/Shanghai
+    
+    # 卷挂载 - 持久化数据
+    volumes:
+      # 应用数据持久化
+      - ./data:/app/data
+      
+      # Selenium脚本目录
+      - ./scripts:/home/headless/Downloads
+      
+      # 日志目录
+      - ./logs:/app/logs
+      
+      # Firefox配置持久化（可选）
+      - ./firefox-profile:/home/headless/.mozilla
+      
+      # 自定义Firefox扩展（如果需要更新）
+      - ./firefox-xpi:/app/firefox-xpi:ro
+    
+    # 重启策略
+    restart: unless-stopped
+    
+    # 资源限制
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 4G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 安全选项
+    security_opt:
+      - seccomp:unconfined
+    
+    # 共享内存大小（Selenium需要）
+    shm_size: '2gb'
+    
+    # 网络模式
+    networks:
+      - automation-network
+    
+    # 依赖服务（如果有的话）
+    # depends_on:
+    #   - database
+
+# 可选：添加独立的数据库服务
+# 如果需要使用PostgreSQL或MySQL替代SQLite
+#  postgres:
+#    image: postgres:15-alpine
+#    container_name: automation-db
+#    environment:
+#      - POSTGRES_DB=automation
+#      - POSTGRES_USER=admin
+#      - POSTGRES_PASSWORD=secure_password
+#    volumes:
+#      - postgres-data:/var/lib/postgresql/data
+#    networks:
+#      - automation-network
+#    restart: unless-stopped
+
+networks:
+  automation-network:
+    driver: bridge
+
+volumes:
+  # 如果使用PostgreSQL
+  # postgres-data:
+  #   driver: local
+  automation-data:
+    driver: local
