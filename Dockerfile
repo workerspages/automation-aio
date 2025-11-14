@@ -69,7 +69,7 @@ RUN mkdir -p /opt/actiona && \
 
 # 创建目录，修改权限
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs && \
-    sudo chmod -R 777 ./data ./home/headless/Downloads ./app/logs
+    chmod -R 777 /home/headless/Downloads /app/data /app/logs
 
 # 创建虚拟环境
 RUN python3 -m venv /opt/venv
