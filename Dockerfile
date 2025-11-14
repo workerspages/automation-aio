@@ -61,6 +61,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-gi \
     gir1.2-gtk-3.0 \
     xvfb \
+    xfce4-session \
+    xfce4-panel \
+    xfce4-terminal \
+    xfce4-appfinder \
+    xfce4-settings \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && apt-get clean \
