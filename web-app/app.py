@@ -13,7 +13,6 @@ from flask_sqlalchemy import SQLAlchemy
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
-# 保证 scripts 在包路径
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 app = Flask(__name__)
@@ -107,7 +106,6 @@ def get_available_scripts():
     scripts = []
     if scripts_dir.exists():
         for file in scripts_dir.iterdir():
-            # 支持 Selenium .side 和 AutoKey .py 或自定义后缀
             if file.suffix.lower() in ['.side', '.py', '.autokey']:
                 scripts.append({'name': file.name, 'path': str(file)})
     return scripts
