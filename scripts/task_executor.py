@@ -252,8 +252,20 @@ class SeleniumIDEExecutor:
                 self.driver.execute_script(target)
             
             elif cmd == 'setWindowSize':
+                if not value or 'x' not in value:
+                    logger.warning(f"setWindowSize 参数格式错误或为空: {value}")
+                    return False
                 sizes = value.split('x')
-                self.driver.set_window_size(int(sizes[0]), int(sizes[1]))
+                if len(sizes) != 2:
+                    logger.warning(f"setWindowSize 参数数量不对: {value}")
+                    return False
+                try:
+                    width = int(sizes[0])
+                    height = int(sizes[1])
+                    self.driver.set_window_size(width, height)
+                except ValueError as e:
+                    logger.error(f"setWindowSize 转换失败: {value}，错误: {e}")
+                    return False
             
             else:
                 logger.warning(f"未知命令: {cmd}")
