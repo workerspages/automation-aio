@@ -2,7 +2,6 @@ FROM accetto/ubuntu-vnc-xfce-firefox-g3:latest
 
 USER root
 
-# 设置所有环境变量
 ENV TZ=Asia/Shanghai \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
@@ -24,9 +23,9 @@ ENV TZ=Asia/Shanghai \
     FLASK_ENV=production \
     FLASK_DEBUG=false \
     HOST=0.0.0.0 \
-    PORT=5000
+    PORT=5000 \
+    DISPLAY=:1
 
-# 更新包管理器并安装所有依赖（包含中文字体）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     language-pack-zh-hans \
@@ -56,51 +55,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     sudo \
+    wget \
+    fuse \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# 配置系统语言
-RUN echo "LANG=zh_CN.UTF-8" > /etc/default/locale && \
-    echo "LC_ALL=zh_CN.UTF-8" >> /etc/default/locale
+# 安装Actiona AppImage
+RUN mkdir -p /opt/actiona && \
+    wget -O /opt/actiona/actiona.AppImage https://github.com/Jmgr/actiona/releases/download/v3.11.1/actiona-3.11.1-x86_64.AppImage && \
+    chmod +x /opt/actiona/actiona.AppImage
+
+# 创建目录，修改权限
+RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs && \
+    chmod -R 777 /home/headless/Downloads /app/data /app/logs
 
 # 创建虚拟环境
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# 创建必要的目录并设置权限
-RUN mkdir -p /app/web-app /app/scripts /app/firefox-xpi /home/headless/Downloads /app/data /app/logs && \
-    chmod -R 777 /app/data /app/logs
-
-# 安装核心 Python 工具
-RUN pip install --no-cache-dir wheel setuptools
-
-# 复制 requirements 文件
 COPY web-app/requirements.txt /app/web-app/
 
-# 逐个安装 Python 依赖包
-RUN pip install --no-cache-dir Flask==3.0.0
-RUN pip install --no-cache-dir Flask-Login==0.6.3
-RUN pip install --no-cache-dir Flask-SQLAlchemy==3.1.1
-RUN pip install --no-cache-dir APScheduler==3.10.4
-RUN pip install --no-cache-dir requests==2.31.0
-RUN pip install --no-cache-dir selenium==4.15.2
-RUN pip install --no-cache-dir cryptography==41.0.7
-RUN pip install --no-cache-dir python-telegram-bot==20.7
+RUN pip install --no-cache-dir wheel setuptools && \
+    pip install --no-cache-dir Flask==3.0.0 Flask-Login==0.6.3 Flask-SQLAlchemy==3.1.1 APScheduler==3.10.4 requests==2.31.0 selenium==4.15.2 cryptography==41.0.7 python-telegram-bot==20.7
 
-# 复制 Firefox 扩展文件
-COPY firefox-xpi/selenium-ide.xpi /app/firefox-xpi/
-
-# 复制 Web 应用文件
+COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
-
-# 复制启动脚本
 COPY scripts/ /app/scripts/
 
-# 安装 Firefox 扩展（使用 Firefox 策略配置）
+# 安装Firefox扩展
 RUN mkdir -p /usr/lib/firefox/distribution && \
-    cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/selenium-ide.xpi && \
+    cp /app/firefox-xpi/selenium-ide.xpi /usr/lib/firefox/distribution/ && \
     echo '{' > /usr/lib/firefox/distribution/policies.json && \
     echo '  "policies": {' >> /usr/lib/firefox/distribution/policies.json && \
     echo '    "Extensions": {' >> /usr/lib/firefox/distribution/policies.json && \
@@ -117,35 +103,10 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
-# 配置 Firefox 中文界面和字体
-RUN mkdir -p /usr/lib/firefox/defaults/pref && \
-    echo 'pref("intl.locale.requested", "zh-CN");' > /usr/lib/firefox/defaults/pref/language.js && \
-    echo 'pref("intl.accept_languages", "zh-CN, zh, en");' >> /usr/lib/firefox/defaults/pref/language.js && \
-    echo 'pref("font.name.serif.zh-CN", "WenQuanYi Zen Hei");' >> /usr/lib/firefox/defaults/pref/language.js && \
-    echo 'pref("font.name.sans-serif.zh-CN", "WenQuanYi Zen Hei");' >> /usr/lib/firefox/defaults/pref/language.js && \
-    echo 'pref("font.name.monospace.zh-CN", "WenQuanYi Zen Hei Mono");' >> /usr/lib/firefox/defaults/pref/language.js
+RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:0 /app /home/headless /opt/venv
 
-# 配置 XFCE 中文界面
-RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
-    echo '<?xml version="1.0" encoding="UTF-8"?>' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
-    echo '<channel name="xsettings" version="1.0">' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
-    echo '  <property name="Gtk" type="empty">' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
-    echo '    <property name="FontName" type="string" value="WenQuanYi Zen Hei 10"/>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
-    echo '  </property>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
-    echo '</channel>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
-
-# 给 headless 用户 sudo 权限（无需密码）
-RUN echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
-
-# 设置脚本可执行权限和目录所有权
-RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && \
-    chown -R 1001:0 /app /home/headless /opt/venv
-
-# 暴露端口
 EXPOSE 5000
 
-# 保持 root 用户启动（startup.sh 会处理权限和服务启动）
-USER root
+USER 1001
 
-# 启动命令
 CMD ["/app/scripts/startup.sh"]
