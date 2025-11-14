@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     ca-certificates \
+    sudo \
     && locale-gen zh_CN.UTF-8 \
     && update-locale LANG=zh_CN.UTF-8 \
     && apt-get clean \
@@ -68,8 +69,9 @@ RUN echo "LANG=zh_CN.UTF-8" > /etc/default/locale && \
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# 创建必要的目录
-RUN mkdir -p /app/web-app /app/scripts /app/firefox-xpi /home/headless/Downloads /app/data /app/logs
+# 创建必要的目录并设置权限
+RUN mkdir -p /app/web-app /app/scripts /app/firefox-xpi /home/headless/Downloads /app/data /app/logs && \
+    chmod -R 777 /app/data /app/logs
 
 # 安装核心 Python 工具
 RUN pip install --no-cache-dir wheel setuptools
@@ -117,15 +119,18 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '  </property>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml && \
     echo '</channel>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
 
+# 给 headless 用户 sudo 权限（无需密码）
+RUN echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
 # 设置脚本可执行权限和目录所有权
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && \
-    chown -R 1001:0 /app /home/headless /opt/venv /app/logs
+    chown -R 1001:0 /app /home/headless /opt/venv
 
 # 暴露端口
 EXPOSE 5000
 
-# 切换到非 root 用户
-USER 1001
+# 保持 root 用户启动（startup.sh 会处理权限和服务启动）
+USER root
 
 # 启动命令
 CMD ["/app/scripts/startup.sh"]
