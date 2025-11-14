@@ -54,201 +54,155 @@ class Task(db.Model):
 def load_user(user_id):
     return db.session.get(User, int(user_id))
 
-# SeleniumIDEExecutor 类拷贝自你之前的完整代码，保持一致
-class SeleniumIDEExecutor:
-    def __init__(self, script_path):
-        self.script_path = script_path
-        self.driver = None
-        self.variables = {}
-        self.base_url = ''
+@app.route('/')
+def index():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
 
-    def setup_driver(self):
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and user.password == password:
+            login_user(user)
+            return redirect(url_for('dashboard'))
+        flash('用户名或密码错误')
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect(url_for('login'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    tasks = Task.query.all()
+    scripts = get_available_scripts()
+    return render_template('dashboard.html', tasks=tasks, scripts=scripts)
+
+@app.route('/health')
+def health():
+    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()}), 200
+
+@app.route('/api/scripts', methods=['GET'])
+@login_required
+def list_scripts():
+    scripts = get_available_scripts()
+    return jsonify(scripts)
+
+def get_available_scripts():
+    scripts_dir = Path(os.environ.get('SCRIPTS_DIR', '/home/headless/Downloads'))
+    scripts = []
+    if scripts_dir.exists():
+        for file in scripts_dir.iterdir():
+            if file.suffix.lower() in ['.side', '.a5s']:
+                scripts.append({'name': file.name, 'path': str(file)})
+    return scripts
+
+@app.route('/api/tasks', methods=['GET', 'POST'])
+@login_required
+def manage_tasks():
+    if request.method == 'POST':
+        data = request.json
+        task = Task(name=data['name'], script_path=data['script_path'],
+                    cron_expression=data['cron_expression'], enabled=data.get('enabled', True))
+        db.session.add(task)
+        db.session.commit()
+        if task.enabled:
+            schedule_task(task)
+        return jsonify({'success': True, 'task_id': task.id})
+    tasks = Task.query.all()
+    return jsonify([{'id': t.id, 'name': t.name, 'script_path': t.script_path,
+                     'cron_expression': t.cron_expression, 'enabled': t.enabled,
+                     'last_run': t.last_run.isoformat() if t.last_run else None,
+                     'last_status': t.last_status} for t in tasks])
+
+@app.route('/api/tasks/<int:task_id>', methods=['GET', 'PUT', 'DELETE'])
+@login_required
+def update_task(task_id):
+    task = db.session.get(Task, task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    if request.method == 'GET':
+        return jsonify({'id': task.id, 'name': task.name, 'script_path': task.script_path,
+                        'cron_expression': task.cron_expression, 'enabled': task.enabled,
+                        'last_run': task.last_run.isoformat() if task.last_run else None,
+                        'last_status': task.last_status})
+    if request.method == 'DELETE':
         try:
-            os.environ['DISPLAY'] = ':1'
-            options = Options()
-            options.add_argument('--no-sandbox')
-            options.add_argument('--disable-dev-shm-usage')
-            options.set_preference('intl.accept_languages', 'zh-CN')
-            options.set_preference('dom.webdriver.enabled', False)
-            options.set_preference('useAutomationExtension', False)
-            options.set_preference('general.useragent.override', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-            self.driver = webdriver.Firefox(options=options)
-            self.driver.implicitly_wait(10)
-            self.driver.execute_script("""
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                window.navigator.chrome = {runtime: {}};
-                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-                Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en']});
-            """)
-            logger.info("WebDriver初始化成功（可视化模式 + 反检测）")
-            return True
-        except Exception as e:
-            logger.error(f"WebDriver初始化失败: {e}")
-            return False
-
-    def load_script(self):
+            scheduler.remove_job(f'task_{task_id}')
+        except:
+            pass
+        db.session.delete(task)
+        db.session.commit()
+        return jsonify({'success': True})
+    if request.method == 'PUT':
+        data = request.json
+        task.name = data.get('name', task.name)
+        task.cron_expression = data.get('cron_expression', task.cron_expression)
+        task.enabled = data.get('enabled', task.enabled)
+        db.session.commit()
         try:
-            with open(self.script_path, 'r', encoding='utf-8') as f:
-                script_data = json.load(f)
-            if 'url' in script_data:
-                self.base_url = script_data['url']
-                logger.info(f"读取到 base URL: {self.base_url}")
-            logger.info(f"成功加载脚本: {self.script_path}")
-            return script_data
-        except Exception as e:
-            logger.error(f"加载脚本失败: {e}")
-            return None
+            scheduler.remove_job(f'task_{task_id}')
+        except:
+            pass
+        if task.enabled:
+            schedule_task(task)
+        return jsonify({'success': True})
 
-    def human_delay(self, min_delay=0.5, max_delay=2.0):
-        time.sleep(random.uniform(min_delay, max_delay))
+@app.route('/api/tasks/<int:task_id>/run', methods=['POST'])
+@login_required
+def run_task_now(task_id):
+    task = db.session.get(Task, task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    execute_script(task.id)
+    return jsonify({'success': True, 'message': '任务已开始执行'})
 
-    def execute_command(self, command):
-        cmd = command.get('command', '')
-        target = self.replace_variables(command.get('target', ''))
-        value = self.replace_variables(command.get('value', ''))
+def schedule_task(task):
+    if task.enabled:
         try:
-            self.human_delay()
-            logger.info(f"执行命令: {cmd} | {target} | {value}")
-            if cmd == 'open':
-                if target.startswith('http'):
-                    url = target
-                elif target.startswith('/'):
-                    url = (self.base_url.rstrip('/') if self.base_url else 'https://www.baidu.com') + target
-                else:
-                    url = f"http://{target}"
-                self.driver.get(url)
-            elif cmd == 'click':
-                element = self.find_element(target)
-                self.driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", element)
-                time.sleep(0.5)
-                ActionChains(self.driver).move_to_element(element).pause(0.3).click().perform()
-            elif cmd == 'type':
-                element = self.find_element(target)
-                element.clear()
-                time.sleep(0.2)
-                for c in value:
-                    element.send_keys(c)
-                    time.sleep(random.uniform(0.05, 0.15))
-            elif cmd == 'sendKeys':
-                element = self.find_element(target)
-                for c in value:
-                    element.send_keys(c)
-                    time.sleep(random.uniform(0.05, 0.15))
-            elif cmd == 'select':
-                from selenium.webdriver.support.select import Select
-                element = self.find_element(target)
-                Select(element).select_by_visible_text(value)
-            elif cmd == 'waitForElementVisible':
-                WebDriverWait(self.driver, 30).until(EC.visibility_of_element_located(self.parse_locator(target)))
-            elif cmd == 'waitForElementPresent':
-                WebDriverWait(self.driver, 30).until(EC.presence_of_element_located(self.parse_locator(target)))
-            elif cmd == 'pause':
-                time.sleep(int(value)/1000)
-            elif cmd == 'store':
-                self.variables[value] = target
-            elif cmd == 'storeText':
-                element = self.find_element(target)
-                self.variables[value] = element.text
-            elif cmd == 'storeValue':
-                element = self.find_element(target)
-                self.variables[value] = element.get_attribute('value')
-            elif cmd == 'assertText':
-                element = self.find_element(target)
-                assert element.text == value, f"文本不匹配:期望'{value}',实际'{element.text}'"
-            elif cmd == 'assertTitle':
-                assert self.driver.title == target, f"标题不匹配:期望'{target}',实际'{self.driver.title}'"
-            elif cmd == 'mouseOver':
-                element = self.find_element(target)
-                ActionChains(self.driver).move_to_element(element).perform()
-            elif cmd == 'doubleClick':
-                element = self.find_element(target)
-                ActionChains(self.driver).double_click(element).perform()
-            elif cmd == 'executeScript' or cmd == 'runScript':
-                self.driver.execute_script(target)
-            elif cmd == 'refresh':
-                self.driver.refresh()
-            elif cmd == 'close':
-                self.driver.close()
-            elif cmd == 'setWindowSize':
-                sizes = value.split('x')
-                self.driver.set_window_size(int(sizes[0]), int(sizes[1]))
-            else:
-                logger.warning(f"未知命令: {cmd}")
-            return True
+            trigger = CronTrigger.from_crontab(task.cron_expression)
+            scheduler.add_job(func=execute_script, trigger=trigger,
+                              id=f'task_{task.id}', args=[task.id], replace_existing=True)
+            logger.info(f'任务 {task.name} (ID: {task.id}) 已调度')
         except Exception as e:
-            logger.error(f"命令执行失败: {cmd} - {e}")
-            return False
+            logger.error(f'调度任务失败: {e}')
 
-    def find_element(self, target):
-        by, value = self.parse_locator(target)
-        return self.driver.find_element(by, value)
-
-    def parse_locator(self, target):
-        if target.startswith('id='):
-            return (By.ID, target[3:])
-        elif target.startswith('name='):
-            return (By.NAME, target[5:])
-        elif target.startswith('css='):
-            return (By.CSS_SELECTOR, target[4:])
-        elif target.startswith('xpath='):
-            return (By.XPATH, target[6:])
-        elif target.startswith('linkText='):
-            return (By.LINK_TEXT, target[9:])
-        elif target.startswith('//'):
-            return (By.XPATH, target)
+def execute_script(task_id):
+    with app.app_context():
+        task = db.session.get(Task, task_id)
+        if not task:
+            return
+        script_path = task.script_path.lower()
+        if script_path.endswith('.side'):
+            return execute_selenium_script(task_id)
+        elif script_path.endswith('.a5s'):
+            return execute_actiona_script(script_path)
         else:
-            return (By.CSS_SELECTOR, target)
-
-    def replace_variables(self, text):
-        if not text:
-            return text
-        for var, val in self.variables.items():
-            text = text.replace(f"${{{var}}}", str(val))
-        return text
-
-    def execute(self):
-        start_time = datetime.now()
-        try:
-            script_data = self.load_script()
-            if not script_data:
-                return False, "脚本加载失败"
-            if not self.setup_driver():
-                return False, "浏览器初始化失败"
-            tests = script_data.get('tests', [])
-            for test in tests:
-                logger.info(f"执行测试: {test.get('name', 'Unnamed')}")
-                for i, command in enumerate(test.get('commands', [])):
-                    if not self.execute_command(command):
-                        return False, f"命令执行失败(第{i+1}条): {command.get('command')}"
-            logger.info("任务执行完成，浏览器将在10秒后关闭")
-            time.sleep(10)
-            duration = (datetime.now() - start_time).total_seconds()
-            logger.info(f"脚本执行成功，耗时:{duration:.2f}秒")
-            return True, f"执行成功，耗时{duration:.2f}秒"
-        except Exception as e:
-            logger.error(f"脚本执行异常: {e}")
-            return False, str(e)
-        finally:
-            if self.driver:
-                try:
-                    self.driver.quit()
-                except:
-                    pass
+            logger.error(f"不支持的脚本类型: {script_path}")
+            return False
 
 def execute_selenium_script(task_id):
+    # 请替换为你完整的 Selenium 执行器逻辑代码
+    from selenium_executor import SeleniumIDEExecutor
     with app.app_context():
         task = db.session.get(Task, task_id)
         if not task:
             return False
         executor = SeleniumIDEExecutor(task.script_path)
         success, message = executor.execute()
-        # 此处可以添加记录日志、更新任务状态
         return success
 
 def execute_actiona_script(script_path):
     try:
         result = subprocess.run(
-            ['/opt/actiona/actiona.AppImage', '-s', script_path],
+            ['/usr/local/bin/actiona', '-s', script_path],
             capture_output=True,
             text=True,
             timeout=300
@@ -282,7 +236,7 @@ if __name__ == '__main__':
                 print(f'加载任务失败 {task.name}: {e}')
     print('='*50)
     print('Selenium 自动化管理平台已启动')
-    print('Web 界面: http://0.0.0.0:5000')
+    print(f'Web 界面: http://0.0.0.0:5000')
     print(f'默认管理员: {admin_username}')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
