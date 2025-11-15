@@ -26,7 +26,6 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
-# 关键依赖补全，含图形/GTK/dbus/mesa/gl/gnome schema与本地X授权
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     language-pack-zh-hans \
@@ -57,8 +56,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     sudo \
     fuse \
-    autokey-gtk \
-    autokey-common \
     python3-gi \
     gir1.2-gtk-3.0 \
     xvfb \
@@ -76,13 +73,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libegl1-mesa \
     libpci3 \
     mesa-utils \
-    gnome-settings-daemon \
-    policykit-1 \
     gnome-icon-theme \
-    && git clone https://github.com/novnc/noVNC.git /usr/share/novnc \
+    policykit-1 \
     && locale-gen zh_CN.UTF-8 \
-    && update-locale LANG=zh_CN.UTF-8 \
-    && apt-get clean \
+    && update-locale LANG=zh_CN.UTF-8
+
+# 手动下载并安装 Autokey deb 包
+WORKDIR /tmp
+
+RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0-0_all.deb \
+    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0-0_all.deb \
+    && dpkg -i autokey-common_0.96.0-0_all.deb autokey-gtk_0.96.0-0_all.deb || apt-get install -f -y \
+    && rm -f autokey-common_0.96.0-0_all.deb autokey-gtk_0.96.0-0_all.deb
+
+# noVNC安装
+RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
+
+# 清理缓存
+RUN apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
@@ -147,7 +155,6 @@ RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '  </property>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml && \
     echo '</channel>' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-screensaver.xml
 
-# 关键：给予文件执行权限和目录所有权
 RUN chmod +x /app/scripts/*.sh /app/scripts/*.py && chown -R 1001:0 /app /home/headless /opt/venv
 
 EXPOSE 5000 5901 6901
