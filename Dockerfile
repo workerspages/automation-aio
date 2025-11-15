@@ -26,7 +26,6 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
-# 第一批安装
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     fonts-wqy-microhei \
@@ -39,35 +38,30 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     cron \
     sqlite3
 
-# 可能有错误的包容错安装
 RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
 RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
 
 RUN locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
-# Python环境及工具链安装
 RUN apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv python3-dev build-essential pkg-config gcc g++ make libffi-dev libssl-dev libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev
 
 RUN apt-get install -y --no-install-recommends python3-full || true
 
-# X11和桌面依赖安装
 RUN apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 xvfb xfce4-session xfce4-panel xfce4-terminal xfce4-appfinder xfce4-settings dbus-x11
 
-# 图形和mesa包安装（失败不影响构建）
 RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
 
-# GTK/Gnome 相关及其他
 RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify || true
 
-# 手动下载autokey软件包安装
+# Autokey 三个包全装
 WORKDIR /tmp
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
-    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0-0_all.deb \
-    && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0-0_all.deb || apt-get install -f -y \
-    && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0-0_all.deb
+    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
+    && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb \
+    && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
+    && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
 
-# noVNC安装
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
 
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
