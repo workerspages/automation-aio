@@ -41,16 +41,16 @@ RUN apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 xvfb xf
 RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
 RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify xautomation x11-utils x11-apps kdialog imagemagick || true
 
-# 系统X11目录只由root创建一次/权限777，普通用户启动时不要再删除X11目录本身
+# 下面这行为Selenium全自动化补充setWindowSize和GUI依赖，关键写在USER 1001前
+RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-0 x11-xserver-utils openbox x11-apps
+
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
 RUN echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
-# 所有home数据目录保证最终属主正确
 RUN mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
 RUN chown -R 1001:1001 /home/headless /app/web-app /app/scripts /app/data /app/logs
 RUN chmod -R u+rwX /home/headless
 
-# 安装Autokey全家桶
 WORKDIR /tmp
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
@@ -58,7 +58,6 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
     && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y \
     && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
 
-# 安装noVNC
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -68,7 +67,6 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY web-app/requirements.txt /app/web-app/
 RUN pip install --no-cache-dir wheel setuptools && pip install --no-cache-dir -r /app/web-app/requirements.txt
 
-# 拷贝项目内容
 COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
 COPY scripts/ /app/scripts/
@@ -91,7 +89,6 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
-# .vnc xstartup初始化
 RUN mkdir -p /home/headless/.vnc && \
     echo '#!/bin/sh' > /home/headless/.vnc/xstartup && \
     echo 'unset SESSION_MANAGER' >> /home/headless/.vnc/xstartup && \
