@@ -26,18 +26,35 @@ ENV TZ=Asia/Shanghai \
     PORT=5000 \
     DISPLAY=:1
 
-# 第一批依赖，基础环境与桌面组件
+# 第一批：基础环境及字体
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
-    language-pack-zh-hans \
     fonts-wqy-microhei \
     fonts-wqy-zenhei \
-    fonts-noto-cjk \
-    fonts-noto-cjk-extra \
-    python3-full \
+    curl \
+    wget \
+    ca-certificates \
+    sudo \
+    git \
+    cron \
+    sqlite3
+
+RUN apt-get install -y --no-install-recommends language-pack-zh-hans || true
+RUN apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-cjk-extra || true
+
+RUN locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
+
+# 第二批：Python环境
+RUN apt-get install -y --no-install-recommends \
+    python3 \
     python3-pip \
     python3-venv \
-    python3-dev \
+    python3-dev
+
+RUN apt-get install -y --no-install-recommends python3-full || true
+
+# 第三批：编译工具及库
+RUN apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     gcc \
@@ -49,14 +66,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxslt1-dev \
     zlib1g-dev \
     libjpeg-dev \
-    libpng-dev \
-    cron \
-    sqlite3 \
-    curl \
-    wget \
-    ca-certificates \
-    sudo \
-    fuse \
+    libpng-dev
+
+# 第四批：X11和桌面依赖
+RUN apt-get install -y --no-install-recommends \
     python3-gi \
     gir1.2-gtk-3.0 \
     xvfb \
@@ -65,31 +78,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xfce4-terminal \
     xfce4-appfinder \
     xfce4-settings \
-    python3-websockify \
-    git \
-    dbus-x11 \
-    gsettings-desktop-schemas \
-    dconf-cli \
+    dbus-x11
+
+# 第五批：图形驱动及mesa
+RUN apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
     libegl1-mesa \
     libpci3 \
-    mesa-utils \
-    gnome-icon-theme \
-    policykit-1 \
-    && locale-gen zh_CN.UTF-8 \
-    && update-locale LANG=zh_CN.UTF-8
+    mesa-utils
 
-# 手动下载并安装 Autokey deb 包
+# 第六批：GTK/Gnome 相关，容错处理
+RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas || true
+RUN apt-get install -y --no-install-recommends dconf-cli || true
+RUN apt-get install -y --no-install-recommends gnome-icon-theme || true
+RUN apt-get install -y --no-install-recommends policykit-1 || true
+
+RUN apt-get install -y --no-install-recommends fuse || true
+RUN apt-get install -y --no-install-recommends python3-websockify || true
+
+# 手动下载并指定正确的autokey-common deb包
 WORKDIR /tmp
-RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0-0_all.deb \
+RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0-0_all.deb \
-    && dpkg -i autokey-common_0.96.0-0_all.deb autokey-gtk_0.96.0-0_all.deb || apt-get install -f -y \
-    && rm -f autokey-common_0.96.0-0_all.deb autokey-gtk_0.96.0-0_all.deb
+    && dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0-0_all.deb || apt-get install -f -y \
+    && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0-0_all.deb
 
 # noVNC安装
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
 
-# 清理
+# 清理APT缓存
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN mkdir -p /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
@@ -124,7 +141,6 @@ RUN mkdir -p /usr/lib/firefox/distribution && \
     echo '  }' >> /usr/lib/firefox/distribution/policies.json && \
     echo '}' >> /usr/lib/firefox/distribution/policies.json
 
-# 创建并配置VNC xstartup文件
 RUN mkdir -p /home/headless/.vnc && \
     echo '#!/bin/sh' > /home/headless/.vnc/xstartup && \
     echo 'unset SESSION_MANAGER' >> /home/headless/.vnc/xstartup && \
@@ -132,7 +148,6 @@ RUN mkdir -p /home/headless/.vnc && \
     echo 'exec startxfce4' >> /home/headless/.vnc/xstartup && \
     chmod +x /home/headless/.vnc/xstartup
 
-# 禁用XFCE电源管理和屏幕保护
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     echo '<?xml version="1.0" encoding="UTF-8"?>' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
     echo '<channel name="xfce4-power-manager" version="1.0">' >> /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml && \
