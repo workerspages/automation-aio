@@ -11,9 +11,9 @@ USERID=$(id -u)
 echo "当前用户: $USERNAME (UID: $USERID)"
 
 echo "准备X11环境..."
-rm -rf /tmp/.X11-unix
-mkdir -p /tmp/.X11-unix
-chmod 1777 /tmp/.X11-unix
+# 不删除目录本身，仅清理可能的旧lock文件
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 2>/dev/null || true
+
 touch /home/$USERNAME/.Xauthority
 chmod 600 /home/$USERNAME/.Xauthority
 xauth generate :1 . trusted 2>/dev/null || true
@@ -29,8 +29,6 @@ export XAUTHORITY="/home/$USERNAME/.Xauthority"
 
 echo "DISPLAY设置为: $DISPLAY"
 echo "XAUTHORITY设置为: $XAUTHORITY"
-
-rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
 
 echo "启动VNC服务器..."
 /usr/bin/Xvnc :1 -desktop "Ubuntu自动化平台" -geometry 1360x768 -depth 24 \
