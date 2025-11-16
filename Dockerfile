@@ -41,13 +41,11 @@ RUN apt-get install -y --no-install-recommends python3-gi gir1.2-gtk-3.0 xvfb xf
 RUN apt-get install -y --no-install-recommends libgl1-mesa-glx libegl1-mesa libpci3 mesa-utils || true
 RUN apt-get install -y --no-install-recommends gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 fuse python3-websockify xautomation x11-utils x11-apps kdialog imagemagick || true
 
-# 下面这行为Selenium全自动化补充setWindowSize和GUI依赖，关键写在USER 1001前
 RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-0 x11-xserver-utils openbox x11-apps
 
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
 RUN echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
-# 修复 root 用户目录问题，同时确保 headless 用户主目录存在
 RUN mkdir -p /home/root && \
     mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs && \
     ln -sf /home/headless/.Xauthority /home/root/.Xauthority 2>/dev/null || true
@@ -56,6 +54,7 @@ RUN chown -R 1001:1001 /home/headless /app/web-app /app/scripts /app/data /app/l
 RUN chmod -R u+rwX /home/headless
 
 WORKDIR /tmp
+
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb \
@@ -63,6 +62,12 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
     && rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
 
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc
+
+# 安装 Cloudflare Tunnel 程序
+RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
+    dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y && \
+    rm -f cloudflared-linux-amd64.deb
+
 RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN python3 -m venv /opt/venv
