@@ -47,7 +47,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgtk-3-0 x11-
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
 RUN echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
-RUN mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs
+# 修复 root 用户目录问题，同时确保 headless 用户主目录存在
+RUN mkdir -p /home/root && \
+    mkdir -p /home/headless /app/web-app /app/scripts /home/headless/Downloads /app/data /app/logs && \
+    ln -sf /home/headless/.Xauthority /home/root/.Xauthority 2>/dev/null || true
+
 RUN chown -R 1001:1001 /home/headless /app/web-app /app/scripts /app/data /app/logs
 RUN chmod -R u+rwX /home/headless
 
