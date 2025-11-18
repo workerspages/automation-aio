@@ -12,7 +12,10 @@
             <span class="icon">🤖</span>
             <h1>自动化管理平台</h1>
         </div>
-        <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
+        <div>
+         <a href="/vnc/vnc.html?path=vnc/websockify" target="_blank" class="logout-btn" style="margin-right: 15px;">远程桌面</a>
+         <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
+        </div>
     </div>
 </nav>
 
