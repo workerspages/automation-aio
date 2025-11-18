@@ -62,8 +62,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ===================================================================
 # 安装Playwright及浏览器依赖
 # ===================================================================
-RUN npm install -g playwright \
-    && npx playwright install
+RUN export PLAYWRIGHT_DOWNLOAD_HOST=https://playwright.azureedge.net && \
+    npm install -g playwright && \
+    npx playwright install --with-deps chromium
 
 # ===================================================================
 # 设置时区和语言
