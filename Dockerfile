@@ -72,11 +72,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装Playwright及浏览器依赖 (现在改为从构建器复制)
+# 安装Playwright及浏览器依赖 (从构建器复制)
 # ===================================================================
-# 只安装 playwright 的 npm 包，不执行下载浏览器的命令
 RUN npm install -g playwright
-# 从第一阶段(playwright-builder)复制已经存在的、对应正确架构的浏览器文件
 COPY --from=playwright-builder /ms-playwright/ /ms-playwright/
 
 # ===================================================================
@@ -124,10 +122,13 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 复制Selenium IDE扩展并解压
+# 下载并解压Selenium IDE扩展 (修改为更可靠的下载方式)
 # ===================================================================
-COPY addons/selenium-ide.crx /opt/selenium-ide.crx
-RUN mkdir -p /opt/selenium-ide-unpacked && unzip /opt/selenium-ide.crx -d /opt/selenium-ide-unpacked
+RUN SELENIUM_IDE_VERSION="3.17.2" && \
+    wget --tries=3 -O /tmp/selenium-ide.zip "https://github.com/SeleniumHQ/selenium-ide/releases/download/v${SELENIUM_IDE_VERSION}/selenium-ide-${SELENIUM_IDE_VERSION}-chrome.zip" && \
+    mkdir -p /opt/selenium-ide-unpacked && \
+    unzip -o /tmp/selenium-ide.zip -d /opt/selenium-ide-unpacked && \
+    rm /tmp/selenium-ide.zip
 
 # ===================================================================
 # 配置VNC密码
