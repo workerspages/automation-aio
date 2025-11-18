@@ -1,4 +1,4 @@
-# = a==================================================================
+# ===================================================================
 # STAGE 1: Playwright Builder
 # 这个阶段专门用来获取预装好的、对应正确架构的浏览器文件
 # 我们使用微软官方的多平台镜像，它同时支持 amd64 和 arm64
@@ -122,11 +122,11 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 下载并解压Selenium IDE扩展 (最终修复版)
+# 下载并解压Selenium IDE扩展 (使用 Python 解压，更稳定)
 # ===================================================================
 RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
     mkdir -p /opt/selenium-ide-unpacked && \
-    unzip /tmp/selenium-ide.crx -d /opt/selenium-ide-unpacked && \
+    python3 -c "import zipfile; zf = zipfile.ZipFile('/tmp/selenium-ide.crx'); zf.extractall('/opt/selenium-ide-unpacked'); zf.close()" && \
     rm /tmp/selenium-ide.crx
 
 # ===================================================================
