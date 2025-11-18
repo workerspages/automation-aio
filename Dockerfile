@@ -83,9 +83,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xauth \
     xserver-xorg-core \
     xserver-xorg-video-dummy \
-    # VNC 服务器 (TigerVNC)
+    # VNC 服务器 (TigerVNC) - 完整安装
     tigervnc-standalone-server \
     tigervnc-common \
+    tigervnc-xorg-extension \
     # XFCE 桌面环境
     xfce4 \
     xfce4-goodies \
@@ -175,7 +176,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     && chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 步骤 6: 创建 VNC 目录 (密码文件将在运行时创建)
+# 步骤 6: 创建 VNC 配置目录和脚本
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc \
     && chown -R headless:headless /home/headless/.vnc
@@ -224,7 +225,92 @@ RUN chmod +x /home/headless/.vnc/xstartup \
     && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 步骤 7: 安装 noVNC
+# 步骤 7: 创建 VNC 密码生成脚本 (使用 Python)
+# ===================================================================
+RUN cat << 'EOF' > /usr/local/bin/create-vnc-passwd
+#!/usr/bin/env python3
+import sys
+import os
+from d3des import deskey
+
+def create_vnc_passwd(password, filename):
+    """创建 VNC 密码文件"""
+    # VNC 密码最多8个字符
+    password = password[:8].ljust(8, '\0')
+    
+    # VNC 使用 DES 加密,密钥是固定的
+    key = b'\xe8\x4a\xd6\x60\xc4\x72\x1a\xe0'
+    
+    # 加密密码
+    encrypted = bytearray(8)
+    for i in range(8):
+        encrypted[i] = password[i] ^ key[i]
+    
+    # 写入文件
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    with open(filename, 'wb') as f:
+        f.write(bytes(encrypted))
+    
+    os.chmod(filename, 0o600)
+    print(f"VNC 密码文件已创建: {filename}")
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        password = os.environ.get('VNC_PW', 'vncpassword')
+    else:
+        password = sys.argv[1]
+    
+    filename = os.path.expanduser('~/.vnc/passwd')
+    if len(sys.argv) >= 3:
+        filename = sys.argv[2]
+    
+    create_vnc_passwd(password, filename)
+EOF
+
+# 简化版本:直接使用 Perl 创建密码(更可靠)
+RUN cat << 'EOF' > /usr/local/bin/create-vnc-passwd
+#!/bin/bash
+set -e
+
+PASSWORD="${1:-${VNC_PW:-vncpassword}}"
+PASSWD_FILE="${2:-$HOME/.vnc/passwd}"
+
+# 创建目录
+mkdir -p "$(dirname "$PASSWD_FILE")"
+
+# 使用 Perl 创建 VNC 密码文件 (VNC 使用简单的 DES 加密)
+perl << 'PERLSCRIPT'
+use strict;
+my $password = $ENV{'VNC_PW'} || 'vncpassword';
+$password = substr($password, 0, 8);  # VNC 密码最多8个字符
+$password .= "\0" x (8 - length($password));  # 填充到8字节
+
+# VNC 固定密钥
+my $key = pack("C8", 0xe8, 0x4a, 0xd6, 0x60, 0xc4, 0x72, 0x1a, 0xe0);
+
+# 简单 XOR 加密
+my $encrypted = '';
+for (my $i = 0; $i < 8; $i++) {
+    $encrypted .= chr(ord(substr($password, $i, 1)) ^ ord(substr($key, $i, 1)));
+}
+
+# 写入文件
+my $file = $ENV{'HOME'} . '/.vnc/passwd';
+open(my $fh, '>', $file) or die "Cannot write to $file: $!";
+binmode($fh);
+print $fh $encrypted;
+close($fh);
+chmod 0600, $file;
+print "VNC password file created: $file\n";
+PERLSCRIPT
+
+echo "✅ VNC 密码文件已创建: $PASSWD_FILE"
+EOF
+
+RUN chmod +x /usr/local/bin/create-vnc-passwd
+
+# ===================================================================
+# 步骤 8: 安装 noVNC
 # ===================================================================
 WORKDIR /tmp
 RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc \
@@ -232,7 +318,7 @@ RUN git clone https://github.com/novnc/noVNC.git /usr/share/novnc \
     && ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # ===================================================================
-# 步骤 8: 安装 AutoKey
+# 步骤 9: 安装 AutoKey
 # ===================================================================
 RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb \
     && wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb \
@@ -241,7 +327,7 @@ RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-co
     && rm -f *.deb
 
 # ===================================================================
-# 步骤 9: 安装 Cloudflare Tunnel (可选)
+# 步骤 10: 安装 Cloudflare Tunnel (可选)
 # ===================================================================
 RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb \
     && dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y \
@@ -251,14 +337,14 @@ RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/c
 RUN rm -rf /tmp/* /var/tmp/*
 
 # ===================================================================
-# 步骤 10: 配置 X11
+# 步骤 11: 配置 X11
 # ===================================================================
 RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
     && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix \
     && echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
 # ===================================================================
-# 步骤 11: 配置 XFCE (禁用屏幕保护和电源管理)
+# 步骤 12: 配置 XFCE (禁用屏幕保护和电源管理)
 # ===================================================================
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml
 
@@ -288,7 +374,7 @@ RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4
 EOF
 
 # ===================================================================
-# 步骤 12: 安装 Python 依赖
+# 步骤 13: 安装 Python 依赖
 # ===================================================================
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
@@ -298,7 +384,7 @@ RUN pip install --no-cache-dir wheel setuptools \
     && pip install --no-cache-dir -r /app/web-app/requirements.txt
 
 # ===================================================================
-# 步骤 13: 复制应用代码和配置
+# 步骤 14: 复制应用代码和配置
 # ===================================================================
 COPY firefox-xpi /app/firefox-xpi/
 COPY web-app/ /app/web-app/
@@ -306,7 +392,7 @@ COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# 步骤 14: 配置 Firefox Selenium IDE 插件 (如果 Firefox 可用)
+# 步骤 15: 配置 Firefox Selenium IDE 插件
 # ===================================================================
 RUN if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
     mkdir -p /usr/lib/firefox/distribution /snap/firefox/current/distribution 2>/dev/null || true; \
@@ -315,7 +401,7 @@ RUN if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
     fi
 
 # ===================================================================
-# 步骤 15: 创建 Supervisor 配置
+# 步骤 16: 创建 Supervisor 配置
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -371,7 +457,7 @@ priority=40
 EOF
 
 # ===================================================================
-# 步骤 16: 创建 Entrypoint 脚本 (在运行时创建VNC密码)
+# 步骤 17: 创建 Entrypoint 脚本
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -393,13 +479,9 @@ else
     echo "❌ 警告: 未找到浏览器"
 fi
 
-# 创建 VNC 密码文件 (在运行时,这样 vncpasswd 命令肯定可用)
+# 使用自定义脚本创建 VNC 密码文件
 echo "创建 VNC 密码文件..."
-mkdir -p /home/headless/.vnc
-echo "${VNC_PW:-vncpassword}" | vncpasswd -f > /home/headless/.vnc/passwd
-chmod 600 /home/headless/.vnc/passwd
-chown headless:headless /home/headless/.vnc/passwd
-echo "✅ VNC 密码文件已创建"
+su - headless -c "/usr/local/bin/create-vnc-passwd"
 
 # 确保目录存在
 mkdir -p /app/data /app/logs /home/headless/Downloads
@@ -422,7 +504,7 @@ EOF
 RUN chmod +x /app/scripts/entrypoint.sh
 
 # ===================================================================
-# 步骤 17: 设置最终权限
+# 步骤 18: 设置最终权限
 # ===================================================================
 RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
