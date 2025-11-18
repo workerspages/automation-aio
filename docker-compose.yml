@@ -2,13 +2,11 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:main
-  # image: yesyunxin/ubuntu-automation:main
+    image: yesyunxin/ubuntu-automation:aio
+    image: ghcr.io/workerspages/ubuntu-automation:aio
     container_name: ubuntu-automation
     ports:
-      - "5000:5000"
-      - "5901:5901"
-      - "6901:6901"
+      - "5000:5000" # 只映射 5000 端口
     environment:
       - VNC_PW=admin
       - SECRET_KEY=admin
@@ -16,12 +14,11 @@ services:
       - ADMIN_PASSWORD=admin
       - TELEGRAM_BOT_TOKEN=12345678:abcdabcdabcdabcdabcdabcd
       - TELEGRAM_CHAT_ID=-12345678
-      - ENABLE_CLOUDFLARE_TUNNEL=true
+      - ENABLE_CLOUDFLARE_TUNNEL=false # 本地测试建议先关闭
       - CLOUDFLARE_TUNNEL_TOKEN=<token>
       - DISPLAY=:1
     volumes:
-      #- ./data:/app/data
-       - ./Downloads:/home/headless/Downloads
-      #- ./firefox-profile:/home/headless/.mozilla
+      - ./Downloads:/home/headless/Downloads
+      # - ./data:/app/data # 如果需要持久化数据，请取消注释
     restart: unless-stopped
     shm_size: '2gb'
