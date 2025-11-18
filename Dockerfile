@@ -47,7 +47,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 步骤 1: 安装基础系统工具和依赖(包括Firefox和expect)
+# 步骤 1: 安装基础系统工具和依赖
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
@@ -62,7 +62,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     gnupg2 \
     apt-transport-https \
-    expect \
     net-tools \
     iproute2 \
     iputils-ping \
@@ -82,7 +81,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xserver-xorg-video-dummy \
     tigervnc-standalone-server \
     tigervnc-common \
-    tigervnc-xorg-extension \
     xfce4 \
     xfce4-goodies \
     xfce4-terminal \
@@ -134,24 +132,20 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
 RUN if [ -f /usr/bin/firefox ]; then \
     echo "✅ Firefox 已从 apt 安装"; \
     elif [ -f /snap/bin/firefox ]; then \
-    echo "Firefox 是 snap 包,创建符号链接"; \
     ln -sf /snap/bin/firefox /usr/bin/firefox; \
     else \
-    echo "⚠️ Firefox 未找到,安装 Chromium 作为备选"; \
     apt-get update && apt-get install -y chromium-browser && apt-get clean && rm -rf /var/lib/apt/lists/*; \
     fi
 
 # ===================================================================
-# 步骤 4: 安装 GeckoDriver (使用固定版本,更可靠)
+# 步骤 4: 安装 GeckoDriver
 # ===================================================================
 RUN GECKODRIVER_VERSION="0.34.0" \
-    && echo "安装 GeckoDriver ${GECKODRIVER_VERSION}" \
     && wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz \
        "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" \
     && tar -xzf /tmp/geckodriver.tar.gz -C /usr/bin/ \
     && chmod +x /usr/bin/geckodriver \
-    && rm /tmp/geckodriver.tar.gz \
-    && geckodriver --version || echo "GeckoDriver安装完成"
+    && rm /tmp/geckodriver.tar.gz
 
 # ===================================================================
 # 步骤 5: 创建用户和目录
@@ -164,7 +158,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     && chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 步骤 6: 创建 VNC 配置目录和脚本
+# 步骤 6: 创建 VNC 配置
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc \
     && chown -R headless:headless /home/headless/.vnc
@@ -206,54 +200,61 @@ RUN chmod +x /home/headless/.vnc/xstartup \
     && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 步骤 7: 创建 VNC 密码生成脚本 (使用 expect)
+# 步骤 7: 创建 VNC 密码生成脚本 (使用 Python - 不依赖vncpasswd)
 # ===================================================================
 RUN cat << 'EOF' > /usr/local/bin/create-vnc-passwd
-#!/usr/bin/expect -f
-set timeout 10
+#!/usr/bin/env python3
+import os
+import sys
 
-if {$argc > 0} {
-    set password [lindex $argv 0]
-} elseif {[info exists env(VNC_PW)]} {
-    set password $env(VNC_PW)
-} else {
-    set password "vncpassword"
-}
+def create_vnc_password_file(password, passwd_file):
+    """
+    创建VNC密码文件
+    VNC使用简单的DES加密,密钥固定
+    """
+    # VNC密码限制为8个字符
+    password = password[:8].encode('ascii')
+    password = password.ljust(8, b'\x00')
+    
+    # VNC固定密钥
+    key = bytes([0xe8, 0x4a, 0xd6, 0x60, 0xc4, 0x72, 0x1a, 0xe0])
+    
+    # XOR加密
+    encrypted = bytes([password[i] ^ key[i] for i in range(8)])
+    
+    # 创建目录
+    os.makedirs(os.path.dirname(passwd_file), exist_ok=True)
+    
+    # 写入文件
+    with open(passwd_file, 'wb') as f:
+        f.write(encrypted)
+    
+    # 设置权限
+    os.chmod(passwd_file, 0o600)
+    
+    print(f"✅ VNC密码文件已创建: {passwd_file}")
+    return True
 
-set home "/home/headless"
-if {[info exists env(HOME)]} {
-    set home $env(HOME)
-}
-
-file mkdir "$home/.vnc"
-
-spawn vncpasswd "$home/.vnc/passwd"
-
-expect {
-    "Password:" {
-        send "$password\r"
-        expect "Verify:"
-        send "$password\r"
-        expect {
-            "Would you like to enter a view-only password" {
-                send "n\r"
-                expect eof
-            }
-            eof
-        }
-    }
-    timeout {
-        puts "错误: vncpasswd 超时"
-        exit 1
-    }
-    eof {
-        puts "错误: vncpasswd 意外退出"
-        exit 1
-    }
-}
-
-puts "\n✅ VNC 密码文件已创建: $home/.vnc/passwd"
-exit 0
+if __name__ == "__main__":
+    # 获取密码
+    password = os.environ.get('VNC_PW', 'vncpassword')
+    if len(sys.argv) > 1:
+        password = sys.argv[1]
+    
+    # 获取文件路径
+    home = os.environ.get('HOME', '/home/headless')
+    passwd_file = f"{home}/.vnc/passwd"
+    if len(sys.argv) > 2:
+        passwd_file = sys.argv[2]
+    
+    try:
+        if create_vnc_password_file(password, passwd_file):
+            sys.exit(0)
+        else:
+            sys.exit(1)
+    except Exception as e:
+        print(f"❌ 创建VNC密码文件失败: {e}")
+        sys.exit(1)
 EOF
 
 RUN chmod +x /usr/local/bin/create-vnc-passwd
@@ -467,18 +468,16 @@ else
 fi
 
 echo "创建 VNC 密码文件..."
-su - headless -c "VNC_PW='${VNC_PW}' /usr/local/bin/create-vnc-passwd '${VNC_PW}'" || {
-    echo "⚠️ VNC密码创建失败,尝试备用方法..."
-    su - headless -c "mkdir -p ~/.vnc && echo '${VNC_PW}' | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd" || {
-        echo "⚠️ 备用方法也失败"
-    }
-}
+su - headless -c "VNC_PW='${VNC_PW}' /usr/local/bin/create-vnc-passwd '${VNC_PW}'"
 
-if [ -f /home/headless/.vnc/passwd ]; then
+if [ -f /home/headless/.vnc/passwd ] && [ -s /home/headless/.vnc/passwd ]; then
     echo "✅ VNC 密码文件已创建"
-    ls -la /home/headless/.vnc/passwd
+    ls -lh /home/headless/.vnc/passwd
+    echo "密码文件内容(hex):"
+    hexdump -C /home/headless/.vnc/passwd | head -1
 else
-    echo "⚠️ VNC 密码文件不存在"
+    echo "❌ VNC 密码文件创建失败或为空"
+    exit 1
 fi
 
 mkdir -p /app/data /app/logs /home/headless/Downloads
