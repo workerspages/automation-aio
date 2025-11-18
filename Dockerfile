@@ -47,7 +47,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 步骤 1: 安装基础系统工具和依赖(包括Firefox)
+# 步骤 1: 安装基础系统工具和依赖(包括Firefox和expect)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # 基础工具
@@ -63,6 +63,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     gnupg2 \
     apt-transport-https \
+    expect \
     # 网络工具
     net-tools \
     iproute2 \
@@ -227,42 +228,59 @@ RUN chmod +x /home/headless/.vnc/xstartup \
     && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 步骤 7: 创建 VNC 密码生成脚本 (使用 Perl)
+# 步骤 7: 创建 VNC 密码生成脚本 (使用 expect - 最可靠)
 # ===================================================================
 RUN cat << 'EOF' > /usr/local/bin/create-vnc-passwd
-#!/bin/bash
-set -e
+#!/usr/bin/expect -f
 
-PASSWORD="${1:-${VNC_PW:-vncpassword}}"
-PASSWD_FILE="${2:-$HOME/.vnc/passwd}"
+set timeout 10
 
-# 创建目录
-mkdir -p "$(dirname "$PASSWD_FILE")"
-
-# 使用 Perl 创建 VNC 密码文件
-perl << 'PERLSCRIPT'
-use strict;
-my $password = $ENV{'VNC_PW'} || 'vncpassword';
-$password = substr($password, 0, 8);
-$password .= "\0" x (8 - length($password));
-
-my $key = pack("C8", 0xe8, 0x4a, 0xd6, 0x60, 0xc4, 0x72, 0x1a, 0xe0);
-
-my $encrypted = '';
-for (my $i = 0; $i < 8; $i++) {
-    $encrypted .= chr(ord(substr($password, $i, 1)) ^ ord(substr($key, $i, 1)));
+# 获取密码,优先从参数,然后环境变量,最后默认值
+if {$argc > 0} {
+    set password [lindex $argv 0]
+} elseif {[info exists env(VNC_PW)]} {
+    set password $env(VNC_PW)
+} else {
+    set password "vncpassword"
 }
 
-my $file = $ENV{'HOME'} . '/.vnc/passwd';
-open(my $fh, '>', $file) or die "Cannot write to $file: $!";
-binmode($fh);
-print $fh $encrypted;
-close($fh);
-chmod 0600, $file;
-print "VNC password file created: $file\n";
-PERLSCRIPT
+# 确保在headless用户的home目录下
+set home "/home/headless"
+if {[info exists env(HOME)]} {
+    set home $env(HOME)
+}
 
-echo "✅ VNC 密码文件已创建: $PASSWD_FILE"
+# 创建.vnc目录
+file mkdir "$home/.vnc"
+
+# 运行vncpasswd
+spawn vncpasswd "$home/.vnc/passwd"
+
+expect {
+    "Password:" {
+        send "$password\r"
+        expect "Verify:"
+        send "$password\r"
+        expect {
+            "Would you like to enter a view-only password" {
+                send "n\r"
+                expect eof
+            }
+            eof
+        }
+    }
+    timeout {
+        puts "错误: vncpasswd 超时"
+        exit 1
+    }
+    eof {
+        puts "错误: vncpasswd 意外退出"
+        exit 1
+    }
+}
+
+puts "\n✅ VNC 密码文件已创建: $home/.vnc/passwd"
+exit 0
 EOF
 
 RUN chmod +x /usr/local/bin/create-vnc-passwd
@@ -480,11 +498,22 @@ else
     echo "❌ 警告: 未找到浏览器"
 fi
 
-# 创建 VNC 密码文件
+# 使用expect创建 VNC 密码文件
 echo "创建 VNC 密码文件..."
-su - headless -c "/usr/local/bin/create-vnc-passwd" || {
-    echo "⚠️ VNC密码创建失败,使用默认配置"
+su - headless -c "VNC_PW='${VNC_PW}' /usr/local/bin/create-vnc-passwd '${VNC_PW}'" || {
+    echo "⚠️ VNC密码创建失败,尝试备用方法..."
+    su - headless -c "mkdir -p ~/.vnc && echo '${VNC_PW}' | vncpasswd -f > ~/.vnc/passwd && chmod 600 ~/.vnc/passwd" || {
+        echo "⚠️ 备用方法也失败,使用无密码模式"
+    }
 }
+
+# 验证密码文件
+if [ -f /home/headless/.vnc/passwd ]; then
+    echo "✅ VNC 密码文件已创建"
+    ls -la /home/headless/.vnc/passwd
+else
+    echo "⚠️ VNC 密码文件不存在"
+fi
 
 # 确保目录存在
 mkdir -p /app/data /app/logs /home/headless/Downloads
@@ -512,9 +541,11 @@ try:
             user.password = admin_password
             db.session.add(user)
             db.session.commit()
-            print(f"Admin user {admin_username} created")
+            print(f"✅ Admin user {admin_username} created")
+        else:
+            print(f"✅ Admin user {admin_username} exists")
 except Exception as e:
-    print(f"Database init failed: {e}")
+    print(f"❌ Database init failed: {e}")
     import traceback
     traceback.print_exc()
 PYEOF
