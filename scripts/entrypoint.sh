@@ -33,15 +33,10 @@ if [ "$ENABLE_CLOUDFLARE_TUNNEL" = "true" ]; then
     fi
 fi
 
-# 初始化数据库和管理员账户
+# 初始化数据库和管理员账户，通过执行外部 Python 脚本
 echo "正在初始化数据库..."
 cd /app/web-app
-/opt/venv/bin/python3 -c 'from app import db, User; db.create_all(); admin_user = User.query.filter_by(username="${ADMIN_USERNAME:-admin}").first(); \
-    if not admin_user: \
-        user = User(username="${ADMIN_USERNAME:-admin}", password="${ADMIN_PASSWORD:-admin123}"); \
-        db.session.add(user); \
-        db.session.commit(); \
-        print("已创建默认管理员账号: ${ADMIN_USERNAME:-admin}")'
+/opt/venv/bin/python3 init_db.py
 
 echo "初始化完成，启动 supervisord..."
 exec /usr/bin/supervisord -c /app/scripts/supervisord.conf
