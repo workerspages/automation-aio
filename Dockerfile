@@ -60,6 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     locales \
     software-properties-common \
     gnupg2 \
+    apt-transport-https \
     # 网络工具
     net-tools \
     iproute2 \
@@ -121,6 +122,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libdbus-glib-1-2 \
     libasound2 \
     libxtst6 \
+    libx11-xcb1 \
+    libpulse0 \
     # 其他图形工具
     gsettings-desktop-schemas \
     dconf-cli \
@@ -142,20 +145,30 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 步骤 3: 安装 Firefox 浏览器 (使用 Mozilla CDN 直接下载)
+# 步骤 3: 安装 Firefox 浏览器
+# 方案1: 使用 Mozilla 官方 APT 仓库 (推荐,最稳定)
 # ===================================================================
-RUN FIREFOX_DOWNLOAD_URL="https://download-installer.cdn.mozilla.net/pub/firefox/releases/latest/linux-x86_64/zh-CN/firefox-latest.tar.bz2" \
-    && wget -O /tmp/firefox.tar.bz2 "$FIREFOX_DOWNLOAD_URL" \
+RUN install -d -m 0755 /etc/apt/keyrings \
+    && curl -fsSL https://packages.mozilla.org/apt/repo-signing-key.gpg -o /etc/apt/keyrings/packages.mozilla.org.asc \
+    && echo "deb [signed-by=/etc/apt/keyrings/packages.mozilla.org.asc] https://packages.mozilla.org/apt mozilla main" > /etc/apt/sources.list.d/mozilla.list \
+    && echo "Package: *\nPin: origin packages.mozilla.org\nPin-Priority: 1000" > /etc/apt/preferences.d/mozilla \
+    && apt-get update \
+    && apt-get install -y firefox \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ===================================================================
+# 步骤 3备选: 如果上面失败,使用 FTP 直接下载指定版本
+# ===================================================================
+RUN if ! command -v firefox &> /dev/null; then \
+    FIREFOX_VERSION="133.0" \
+    && echo "从 Mozilla FTP 下载 Firefox ${FIREFOX_VERSION}..." \
+    && wget -O /tmp/firefox.tar.bz2 "https://ftp.mozilla.org/pub/firefox/releases/${FIREFOX_VERSION}/linux-x86_64/zh-CN/firefox-${FIREFOX_VERSION}.tar.bz2" \
     && tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
     && ln -s /opt/firefox/firefox /usr/bin/firefox \
-    && rm /tmp/firefox.tar.bz2
-
-# 或者使用固定版本(更稳定)
-# RUN FIREFOX_VERSION="123.0" \
-#     && wget -O /tmp/firefox.tar.bz2 "https://download-installer.cdn.mozilla.net/pub/firefox/releases/${FIREFOX_VERSION}/linux-x86_64/zh-CN/firefox-${FIREFOX_VERSION}.tar.bz2" \
-#     && tar -xjf /tmp/firefox.tar.bz2 -C /opt/ \
-#     && ln -s /opt/firefox/firefox /usr/bin/firefox \
-#     && rm /tmp/firefox.tar.bz2
+    && rm /tmp/firefox.tar.bz2 \
+    && echo "Firefox ${FIREFOX_VERSION} 安装完成"; \
+    fi
 
 # ===================================================================
 # 步骤 4: 安装 GeckoDriver (Selenium WebDriver for Firefox)
@@ -311,17 +324,19 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # ===================================================================
 # 步骤 14: 配置 Firefox Selenium IDE 插件
 # ===================================================================
-RUN mkdir -p /opt/firefox/distribution \
+# 检测 Firefox 安装位置并配置插件
+RUN FIREFOX_DIR=$(dirname $(readlink -f $(which firefox)) 2>/dev/null || echo "/opt/firefox") \
+    && mkdir -p ${FIREFOX_DIR}/distribution \
     && if [ -f /app/firefox-xpi/selenium-ide.xpi ]; then \
-       cp /app/firefox-xpi/selenium-ide.xpi /opt/firefox/distribution/; \
-    fi || true
-
-RUN cat << 'EOF' > /opt/firefox/distribution/policies.json
+       cp /app/firefox-xpi/selenium-ide.xpi ${FIREFOX_DIR}/distribution/; \
+    fi || true \
+    && cat << 'EOF' > ${FIREFOX_DIR}/distribution/policies.json
 {
   "policies": {
     "Extensions": {
       "Install": [
-        "file:///opt/firefox/distribution/selenium-ide.xpi"
+        "file:///opt/firefox/distribution/selenium-ide.xpi",
+        "file:///usr/lib/firefox/distribution/selenium-ide.xpi"
       ]
     },
     "ExtensionSettings": {
@@ -400,6 +415,13 @@ set -e
 echo "==================================="
 echo "Ubuntu 自动化平台启动中..."
 echo "==================================="
+
+# 验证 Firefox 安装
+if command -v firefox &> /dev/null; then
+    echo "✅ Firefox 已安装: $(firefox --version)"
+else
+    echo "❌ 警告: Firefox 未找到"
+fi
 
 # 确保目录存在
 mkdir -p /app/data /app/logs /home/headless/Downloads
