@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖 (包含 actiona, unzip, python3)
+# 安装系统依赖 (增加 p7zip-full 用于解压CRX, 增加 actiona)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -60,7 +60,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
-    actiona \
+    # --- 增加 p7zip-full (解压神器) 和 actiona ---
+    p7zip-full actiona \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
@@ -73,28 +74,13 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 下载并安装 Selenium IDE 扩展 (Python 强力解压版)
+# 下载并安装 Selenium IDE 扩展 (使用 7z 解压)
 # ===================================================================
 RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
     mkdir -p /opt/selenium-ide-unpacked && \
-    # --- 关键修改：使用 Python 读取二进制流，跳过 CRX 头部，精准定位 Zip 起始位置 ---
-    python3 -c "import zipfile, io, sys; \
-f = open('/tmp/selenium-ide.crx', 'rb'); \
-data = f.read(); \
-f.close(); \
-# 查找 Zip 文件头 (PK\x03\x04)
-pos = data.find(b'PK\x03\x04'); \
-if pos == -1: \
-    print('Error: Not a valid Zip/CRX file'); \
-    sys.exit(1); \
-try: \
-    z = zipfile.ZipFile(io.BytesIO(data[pos:])); \
-    z.extractall('/opt/selenium-ide-unpacked'); \
-    print('Extracted successfully'); \
-except Exception as e: \
-    print(f'Unzip failed: {e}'); \
-    sys.exit(1);" && \
-    # --- 目录结构修正 ---
+    # --- 关键修改：使用 7z 解压 CRX，自动处理文件头问题 ---
+    7z x /tmp/selenium-ide.crx -o/opt/selenium-ide-unpacked -y && \
+    # --- 目录结构修正: 确保 manifest.json 在根目录 ---
     if [ ! -f "/opt/selenium-ide-unpacked/manifest.json" ]; then \
         SUBDIR=$(find /opt/selenium-ide-unpacked -name "manifest.json" -printf "%h\n" | head -1); \
         if [ -n "$SUBDIR" ]; then \
@@ -102,7 +88,7 @@ except Exception as e: \
             mv "$SUBDIR"/* /opt/selenium-ide-unpacked/; \
         fi; \
     fi && \
-    # 验证
+    # 验证文件是否存在
     ls -l /opt/selenium-ide-unpacked/manifest.json && \
     # 修正权限
     chown -R headless:headless /opt/selenium-ide-unpacked && \
