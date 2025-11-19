@@ -1,17 +1,5 @@
 # ===================================================================
-# STAGE 1: Playwright Builder
-# 这个阶段专门用来获取预装好的、对应正确架构的浏览器文件
-# 我们使用微软官方的多平台镜像，它同时支持 amd64 和 arm64
-# ===================================================================
-FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy AS playwright-builder
-
-# 这个镜像里已经包含了所有浏览器，我们不需要再运行 install 命令
-# 我们只需要把它当做一个可靠的文件来源即可
-
-
-# ===================================================================
-# STAGE 2: Final Image
-# 这是你的主构建阶段，从 ubuntu:22.04 开始
+# STAGE 1: Base Image & Dependencies
 # ===================================================================
 FROM ubuntu:22.04
 
@@ -19,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 USER root
 
-# 更新环境变量，指向新的浏览器路径
+# 环境变量配置
 ENV TZ=Asia/Shanghai \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
@@ -35,8 +23,7 @@ ENV TZ=Asia/Shanghai \
     MAX_RETRIES=3 \
     LOG_LEVEL=INFO \
     LOG_FILE=/app/data/automation.log \
-    FIREFOX_BINARY=/usr/bin/google-chrome-stable \
-    GECKODRIVER_PATH=/usr/bin/geckodriver \
+    CHROME_BINARY=/usr/bin/google-chrome-stable \
     FLASK_ENV=production \
     FLASK_DEBUG=false \
     HOST=0.0.0.0 \
@@ -46,16 +33,16 @@ ENV TZ=Asia/Shanghai \
     NOVNC_PORT=6901 \
     VNC_RESOLUTION=1360x768 \
     VNC_COL_DEPTH=24 \
-    VNC_PW=xPuCyg4h \
+    VNC_PW=admin \
     ADMIN_USERNAME=admin \
-    ADMIN_PASSWORD=xPuCyg4hE7c9Eq6r \
+    ADMIN_PASSWORD=admin123 \
     XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg \
     XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share \
     XDG_CURRENT_DESKTOP=XFCE \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖 (移除 chromium-browser)
+# 安装系统依赖
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -69,37 +56,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gir1.2-gtk-3.0 build-essential pkg-config gcc g++ make libffi-dev libssl-dev \
     libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev \
     gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 \
-    xautomation kdialog imagemagick nginx nodejs npm unzip libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
+    xautomation kdialog imagemagick nginx nodejs npm unzip libnss3 libatk-bridge2.0-0 \
+    libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
+    libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
+    libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 直接安装 Google Chrome (最终修复)
+# 安装 Google Chrome
 # ===================================================================
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
     apt-get install -y /tmp/chrome.deb && \
     rm /tmp/chrome.deb
 
 # ===================================================================
-# 安装Playwright及浏览器依赖 (从构建器复制)
-# ===================================================================
-RUN npm install -g playwright
-COPY --from=playwright-builder /ms-playwright/ /ms-playwright/
-
-# ===================================================================
 # 设置时区和语言
 # ===================================================================
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
-
-# ===================================================================
-# 安装GeckoDriver
-# ===================================================================
-RUN GECKODRIVER_VERSION="0.34.0" && \
-    wget --timeout=30 --tries=3 -O /tmp/geckodriver.tar.gz \
-    "https://github.com/mozilla/geckodriver/releases/download/v${GECKODRIVER_VERSION}/geckodriver-v${GECKODRIVER_VERSION}-linux64.tar.gz" && \
-    tar -xzf /tmp/geckodriver.tar.gz -C /usr/bin/ && \
-    chmod +x /usr/bin/geckodriver && \
-    rm /tmp/geckodriver.tar.gz
 
 # ===================================================================
 # 安装AutoKey三件套
@@ -130,7 +104,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 下载并解压Selenium IDE扩展 (使用 Python 解压，更稳定)
+# 下载并解压Selenium IDE扩展
 # ===================================================================
 RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
     mkdir -p /opt/selenium-ide-unpacked && \
@@ -138,17 +112,11 @@ RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/w
     rm /tmp/selenium-ide.crx
 
 # ===================================================================
-# 配置VNC密码
-# ===================================================================
-RUN mkdir -p /home/headless/.vnc && \
-    chown headless:headless /home/headless/.vnc && \
-    su - headless -c "echo xPuCyg4h | vncpasswd -f > /home/headless/.vnc/passwd" && \
-    chmod 600 /home/headless/.vnc/passwd && \
-    chown headless:headless /home/headless/.vnc/passwd
-
-# ===================================================================
 # VNC xstartup脚本
 # ===================================================================
+RUN mkdir -p /home/headless/.vnc && \
+    chown headless:headless /home/headless/.vnc
+
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
 unset SESSION_MANAGER
@@ -197,7 +165,8 @@ RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
     chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix && \
     echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
 
-RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml
+RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    chown -R headless:headless /home/headless/.config
 
 RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -239,7 +208,7 @@ COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# Supervisor配置 (更新为 google-chrome-stable)
+# Supervisor配置
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -274,15 +243,6 @@ stdout_logfile=/app/logs/novnc.log
 stderr_logfile=/app/logs/novnc-error.log
 user=headless
 priority=20
-
-[program:chromium]
-command=su - headless -c "/usr/bin/google-chrome-stable --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked --user-data-dir=/home/headless/.config/chromium --start-maximized"
-autostart=true
-autorestart=true
-stdout_logfile=/app/logs/chromium.log
-stderr_logfile=/app/logs/chromium-error.log
-user=headless
-priority=15
 
 [program:nginx]
 command=/usr/sbin/nginx -g \"daemon off;\"
@@ -354,6 +314,7 @@ echo "==================================="
 echo "Ubuntu 自动化平台启动中..."
 echo "==================================="
 
+# 检查 Chrome 安装
 if command -v google-chrome-stable &> /dev/null; then
     echo "✅ Google Chrome 已安装"
     google-chrome-stable --version
@@ -361,9 +322,15 @@ else
     echo "❌ Google Chrome 未找到"
 fi
 
-echo "VNC密码文件:"
-ls -lh /home/headless/.vnc/passwd
-hexdump -C /home/headless/.vnc/passwd | head -1
+# 配置 VNC 密码 (动态生成)
+echo "配置 VNC 密码..."
+mkdir -p /home/headless/.vnc
+chown headless:headless /home/headless/.vnc
+su - headless -c "echo ${VNC_PW:-admin} | vncpasswd -f > /home/headless/.vnc/passwd"
+chmod 600 /home/headless/.vnc/passwd
+chown headless:headless /home/headless/.vnc/passwd
+
+echo "VNC密码文件已生成"
 
 mkdir -p /app/data /app/logs /home/headless/Downloads
 chown -R headless:headless /app /home/headless /opt/venv
