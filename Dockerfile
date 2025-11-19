@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖 (增加 p7zip-full 用于解压CRX, 增加 actiona)
+# 安装系统依赖 (包含 actiona, p7zip-full)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -60,8 +60,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
-    # --- 增加 p7zip-full (解压神器) 和 actiona ---
-    p7zip-full actiona \
+    # --- 增加 actiona 和 p7zip-full ---
+    actiona p7zip-full \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
@@ -74,13 +74,32 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 下载并安装 Selenium IDE 扩展 (使用 7z 解压)
+# 安装 Selenium IDE 扩展 (从本地 COPY)
 # ===================================================================
-RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
-    mkdir -p /opt/selenium-ide-unpacked && \
-    # --- 关键修改：使用 7z 解压 CRX，自动处理文件头问题 ---
-    7z x /tmp/selenium-ide.crx -o/opt/selenium-ide-unpacked -y && \
-    # --- 目录结构修正: 确保 manifest.json 在根目录 ---
+# 1. 复制本地文件到镜像临时目录
+COPY addons/selenium-ide.crx /tmp/selenium-ide.crx
+
+# 2. 解压与配置
+RUN mkdir -p /opt/selenium-ide-unpacked && \
+    # 创建 Python 解压脚本 (处理 CRX 头)
+    printf "import zipfile, io, sys, os\n\
+try:\n\
+    with open('/tmp/selenium-ide.crx', 'rb') as f:\n\
+        data = f.read()\n\
+    pos = data.find(b'PK\x03\x04')\n\
+    if pos == -1:\n\
+        print('Error: File is not a valid CRX/ZIP. Header dump:')\n\
+        print(data[:100])\n\
+        sys.exit(1)\n\
+    with zipfile.ZipFile(io.BytesIO(data[pos:])) as z:\n\
+        z.extractall('/opt/selenium-ide-unpacked')\n\
+    print('Extraction successful')\n\
+except Exception as e:\n\
+    print(f'Exception: {e}')\n\
+    sys.exit(1)\n" > /tmp/extract_crx.py && \
+    # 执行解压
+    python3 /tmp/extract_crx.py && \
+    # 目录结构修正
     if [ ! -f "/opt/selenium-ide-unpacked/manifest.json" ]; then \
         SUBDIR=$(find /opt/selenium-ide-unpacked -name "manifest.json" -printf "%h\n" | head -1); \
         if [ -n "$SUBDIR" ]; then \
@@ -88,11 +107,10 @@ RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/w
             mv "$SUBDIR"/* /opt/selenium-ide-unpacked/; \
         fi; \
     fi && \
-    # 验证文件是否存在
+    # 验证与权限
     ls -l /opt/selenium-ide-unpacked/manifest.json && \
-    # 修正权限
     chown -R headless:headless /opt/selenium-ide-unpacked && \
-    rm /tmp/selenium-ide.crx
+    rm /tmp/selenium-ide.crx /tmp/extract_crx.py
 
 # ===================================================================
 # 配置 Chrome 启动包装器 (强制加载插件 + No-Sandbox)
