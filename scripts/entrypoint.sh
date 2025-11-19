@@ -5,7 +5,7 @@ echo "==================================="
 echo "Ubuntu 自动化平台启动中..."
 echo "==================================="
 
-# 检查 Chrome 安装
+# 1. 检查 Chrome 安装
 if command -v google-chrome-stable &> /dev/null; then
     echo "✅ Google Chrome 已安装"
     google-chrome-stable --version
@@ -13,7 +13,7 @@ else
     echo "❌ Google Chrome 未找到"
 fi
 
-# 配置 VNC 密码 (动态生成)
+# 2. 配置 VNC 密码
 echo "配置 VNC 密码..."
 mkdir -p /home/headless/.vnc
 chown headless:headless /home/headless/.vnc
@@ -24,9 +24,11 @@ chown headless:headless /home/headless/.vnc/passwd
 
 echo "VNC密码文件已生成"
 
+# 3. 权限修正
 mkdir -p /app/data /app/logs /home/headless/Downloads
 chown -R headless:headless /app /home/headless /opt/venv
 
+# 4. 初始化数据库
 echo "初始化数据库..."
 /usr/local/bin/init-database || {
     echo "数据库初始化备用方法..."
@@ -55,6 +57,38 @@ except Exception as e:
     traceback.print_exc()
 PYEOF
 }
+
+# ===================================================================
+# 5. [新增] 配置 Cloudflare Tunnel
+# ===================================================================
+if [ "${ENABLE_CLOUDFLARE_TUNNEL}" == "true" ]; then
+    echo "🌐 检测到 Cloudflare Tunnel 已启用..."
+    
+    if [ -z "${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
+        echo "❌ 错误: ENABLE_CLOUDFLARE_TUNNEL=true 但未提供 CLOUDFLARE_TUNNEL_TOKEN"
+    else
+        echo "✅ 正在添加 Cloudflare Tunnel 到 Supervisor 配置..."
+        
+        # 动态追加配置到 supervisord 配置文件
+        # 注意：这里直接将 Token 写入命令，或者你可以让 supervisor 传递环境变量
+        cat << EOF >> /etc/supervisor/conf.d/services.conf
+
+[program:cloudflared]
+command=/usr/bin/cloudflared tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+autostart=true
+autorestart=true
+stdout_logfile=/app/logs/cloudflared.log
+stderr_logfile=/app/logs/cloudflared-error.log
+user=headless
+priority=50
+EOF
+    fi
+else
+    echo "⚪ Cloudflare Tunnel 未启用"
+fi
+
+echo "修正数据库权限..."
+chown -R headless:headless /app/data
 
 echo "==================================="
 echo "启动服务..."
