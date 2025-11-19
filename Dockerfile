@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖 (保留 actiona, 移除 p7zip-full)
+# 安装系统依赖 (包含 actiona, p7zip-full)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -60,8 +60,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
-    # --- 保留 actiona ---
-    actiona \
+    actiona p7zip-full \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
@@ -74,9 +73,8 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 配置 Chrome 启动包装器 (仅保留 No-Sandbox，移除插件加载)
+# 配置 Chrome 启动包装器 (No-Sandbox, 不加载插件)
 # ===================================================================
-# 这一步非常关键：它解决了 Chrome 在 Docker 中启动崩溃的问题
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
     echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu "$@"' >> /usr/bin/google-chrome-stable && \
@@ -310,6 +308,83 @@ except Exception as e:
 EOF
 
 RUN chmod +x /usr/local/bin/init-database
+
+# ===================================================================
+# Entrypoint脚本 (关键修复: 启动前修正数据库权限)
+# ===================================================================
+RUN cat << 'EOF' > /app/scripts/entrypoint.sh
+#!/bin/bash
+set -e
+
+echo "==================================="
+echo "Ubuntu 自动化平台启动中..."
+echo "==================================="
+
+# 检查 Chrome 安装
+if command -v google-chrome-stable &> /dev/null; then
+    echo "✅ Google Chrome 已安装"
+    google-chrome-stable --version
+else
+    echo "❌ Google Chrome 未找到"
+fi
+
+# 配置 VNC 密码 (动态生成)
+echo "配置 VNC 密码..."
+mkdir -p /home/headless/.vnc
+chown headless:headless /home/headless/.vnc
+su - headless -c "echo ${VNC_PW:-admin} | vncpasswd -f > /home/headless/.vnc/passwd"
+chmod 600 /home/headless/.vnc/passwd
+chown headless:headless /home/headless/.vnc/passwd
+
+echo "VNC密码文件已生成"
+
+mkdir -p /app/data /app/logs /home/headless/Downloads
+# 预先设置目录权限
+chown -R headless:headless /app /home/headless /opt/venv
+
+echo "初始化数据库..."
+# 初始化脚本会以 root 身份运行并创建 tasks.db
+/usr/local/bin/init-database || {
+    echo "数据库初始化备用方法..."
+    cd /app/web-app
+    /opt/venv/bin/python3 << 'PYEOF'
+import sys
+sys.path.insert(0, '/app/web-app')
+try:
+    from app import app, db, User
+    import os
+    with app.app_context():
+        db.create_all()
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        if not User.query.filter_by(username=admin_username).first():
+            user = User(username=admin_username)
+            user.password = admin_password
+            db.session.add(user)
+            db.session.commit()
+            print(f"✅ Admin user {admin_username} created")
+        else:
+            print(f"✅ Admin user {admin_username} exists")
+except Exception as e:
+    print(f"❌ Database init failed: {e}")
+    import traceback
+    traceback.print_exc()
+PYEOF
+}
+
+echo "修正数据库权限..."
+# 关键步骤：初始化后，必须将数据库文件所有权移交给 headless 用户
+# 否则 WebApp (运行为 headless) 无法写入 root 创建的 db 文件
+chown -R headless:headless /app/data
+
+echo "==================================="
+echo "启动服务..."
+echo "==================================="
+
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/services.conf
+EOF
+
+RUN chmod +x /app/scripts/entrypoint.sh
 
 # ===================================================================
 # 设置权限及端口暴露
