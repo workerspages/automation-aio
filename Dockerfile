@@ -40,11 +40,10 @@ ENV TZ=Asia/Shanghai \
     XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share \
     XDG_CURRENT_DESKTOP=XFCE \
     XDG_SESSION_DESKTOP=xfce \
-    # Playwright 浏览器公共安装路径
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 # ===================================================================
-# 安装系统依赖 (保留 actiona)
+# 安装系统依赖
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -62,7 +61,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
-    actiona \
+    actiona p7zip-full \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
@@ -75,7 +74,7 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 配置 Chrome 启动包装器 (仅保留 No-Sandbox，移除插件加载)
+# 配置 Chrome 启动包装器 (No-Sandbox)
 # ===================================================================
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
@@ -116,7 +115,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# VNC xstartup脚本
+# VNC xstartup脚本 (关键修改: 导出 DBUS 地址)
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
     chown headless:headless /home/headless/.vnc
@@ -126,10 +125,13 @@ RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
-if [ -z "$DBUS_SESSION_BUS_ADDRESS" ]; then
-    eval $(dbus-launch --sh-syntax)
-    export DBUS_SESSION_BUS_ADDRESS
-fi
+# 启动 D-Bus 并获取地址
+eval $(dbus-launch --sh-syntax)
+export DBUS_SESSION_BUS_ADDRESS
+
+# 将 D-Bus 地址写入文件，供 WebApp 读取
+echo "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS'" > $HOME/.dbus-env
+chmod 644 $HOME/.dbus-env
 
 [ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
 [ -r "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
@@ -154,6 +156,13 @@ exec /usr/bin/startxfce4
 EOF
 
 RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
+
+# ===================================================================
+# 配置 AutoKey 自启动 (关键修改: 让桌面环境启动它)
+# ===================================================================
+RUN mkdir -p /home/headless/.config/autostart && \
+    printf "[Desktop Entry]\nType=Application\nName=AutoKey\nExec=autokey-gtk\nTerminal=false\n" > /home/headless/.config/autostart/autokey.desktop && \
+    chown -R headless:headless /home/headless/.config
 
 # ===================================================================
 # noVNC安装
@@ -203,13 +212,10 @@ RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY web-app/requirements.txt /app/web-app/
-# 1. 创建公共目录
 RUN mkdir -p /opt/playwright && \
     pip install --no-cache-dir wheel setuptools && \
     pip install --no-cache-dir -r /app/web-app/requirements.txt && \
-    # 2. 安装浏览器到公共目录
     playwright install chromium && \
-    # 3. 关键：赋予 headless 用户权限
     chmod -R 777 /opt/playwright
 
 # ===================================================================
@@ -220,7 +226,7 @@ COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# Supervisor配置
+# Supervisor配置 (关键修改: WebApp 等待并加载 DBUS 环境)
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -256,15 +262,7 @@ stderr_logfile=/app/logs/novnc-error.log
 user=headless
 priority=20
 
-[program:autokey]
-command=/usr/bin/autokey-gtk
-user=headless
-environment=DISPLAY=":1",HOME="/home/headless"
-autostart=true
-autorestart=true
-stdout_logfile=/app/logs/autokey.log
-stderr_logfile=/app/logs/autokey-error.log
-priority=25
+# 注意：AutoKey 现在由 XFCE 自启动管理，不再这里配置
 
 [program:nginx]
 command=/usr/sbin/nginx -g "daemon off;"
@@ -275,7 +273,9 @@ stderr_logfile=/app/logs/nginx-error.log
 priority=30
 
 [program:webapp]
-command=/opt/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:8000 app:app
+# 核心技巧：等待 .dbus-env 生成，然后 source 它，再启动 gunicorn
+# 这样 WebApp 就拥有了控制 AutoKey 的钥匙
+command=/bin/bash -c "while [ ! -f /home/headless/.dbus-env ]; do sleep 1; done; source /home/headless/.dbus-env; exec /opt/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:8000 app:app"
 directory=/app/web-app
 autostart=true
 autorestart=true
@@ -327,7 +327,7 @@ EOF
 RUN chmod +x /usr/local/bin/init-database
 
 # ===================================================================
-# Entrypoint脚本 (确保修复数据库权限)
+# Entrypoint脚本
 # ===================================================================
 RUN cat << 'EOF' > /app/scripts/entrypoint.sh
 #!/bin/bash
@@ -388,7 +388,6 @@ PYEOF
 }
 
 echo "修正数据库权限..."
-# 确保 headless 用户能写入数据库
 chown -R headless:headless /app/data
 
 echo "==================================="
