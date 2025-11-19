@@ -42,7 +42,7 @@ ENV TZ=Asia/Shanghai \
     XDG_SESSION_DESKTOP=xfce
 
 # ===================================================================
-# 安装系统依赖 (增加 actiona)
+# 安装系统依赖 (包含 actiona)
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git vim nano sudo tzdata locales \
@@ -60,7 +60,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
-    # --- 新增 Actiona ---
     actiona \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -72,7 +71,6 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     apt-get install -y /tmp/chrome.deb && \
     rm /tmp/chrome.deb && \
     rm -rf /var/lib/apt/lists/* && \
-    # 创建 Chrome 启动包装器
     mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
     echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked "$@"' >> /usr/bin/google-chrome-stable && \
@@ -220,7 +218,7 @@ COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # ===================================================================
-# Supervisor配置
+# Supervisor配置 (关键修改: webapp 用户)
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -271,7 +269,9 @@ autostart=true
 autorestart=true
 stdout_logfile=/app/logs/webapp.log
 stderr_logfile=/app/logs/webapp-error.log
-environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH)s"
+# 关键：让 WebApp 以 headless 用户运行，这样它启动的浏览器才会出现在 headless 的 VNC 桌面上
+user=headless
+environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH)s",DISPLAY=":1"
 priority=40
 EOF
 
