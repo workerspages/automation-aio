@@ -63,14 +63,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装 Google Chrome (修复依赖问题)
+# 安装 Google Chrome (修复依赖问题 + 强制 No-Sandbox 补丁)
 # ===================================================================
-# 必须在这里再次 apt-get update，因为上一步已经清理了缓存
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
     apt-get update && \
     apt-get install -y /tmp/chrome.deb && \
     rm /tmp/chrome.deb && \
-    rm -rf /var/lib/apt/lists/*
+    rm -rf /var/lib/apt/lists/* && \
+    # --- 关键修复：创建 Chrome 启动包装器 --- 
+    # 将原二进制文件重命名
+    mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
+    # 创建一个新的脚本，强制添加 --no-sandbox 参数
+    echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
+    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu "$@"' >> /usr/bin/google-chrome-stable && \
+    # 赋予执行权限
+    chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
 # 设置时区和语言
@@ -79,13 +86,13 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 安装AutoKey三件套
+# 安装AutoKey (修复安装方式：使用官方源)
 # ===================================================================
-RUN wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-common_0.96.0_all.deb && \
-    wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-gtk_0.96.0_all.deb && \
-    wget https://github.com/autokey/autokey/releases/download/v0.96.0/autokey-qt_0.96.0_all.deb && \
-    dpkg -i autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb || apt-get install -f -y && \
-    rm -f autokey-common_0.96.0_all.deb autokey-gtk_0.96.0_all.deb autokey-qt_0.96.0_all.deb
+# 直接从 Ubuntu 源安装 autokey-gtk，解决依赖问题
+RUN apt-get update && \
+    apt-get install -y autokey-gtk && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
 # 安装Cloudflare Tunnel
