@@ -63,20 +63,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 安装 Google Chrome (修复依赖问题 + 强制 No-Sandbox 补丁)
+# 安装 Google Chrome (强制加载插件 + No-Sandbox)
 # ===================================================================
 RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
     apt-get update && \
     apt-get install -y /tmp/chrome.deb && \
     rm /tmp/chrome.deb && \
     rm -rf /var/lib/apt/lists/* && \
-    # --- 关键修复：创建 Chrome 启动包装器 --- 
-    # 将原二进制文件重命名
+    # --- 关键修复：创建 Chrome 启动包装器 ---
+    # 1. 备份原程序
     mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
-    # 创建一个新的脚本，强制添加 --no-sandbox 参数
+    # 2. 创建新脚本：强制添加 --no-sandbox 和 --load-extension
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
-    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu "$@"' >> /usr/bin/google-chrome-stable && \
-    # 赋予执行权限
+    # 注意：这里添加了 --load-extension=/opt/selenium-ide-unpacked
+    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu --load-extension=/opt/selenium-ide-unpacked "$@"' >> /usr/bin/google-chrome-stable && \
+    # 3. 赋予执行权限
     chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
@@ -86,9 +87,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8
 
 # ===================================================================
-# 安装AutoKey (修复安装方式：使用官方源)
+# 安装AutoKey (使用官方源)
 # ===================================================================
-# 直接从 Ubuntu 源安装 autokey-gtk，解决依赖问题
 RUN apt-get update && \
     apt-get install -y autokey-gtk && \
     apt-get clean && \
@@ -114,11 +114,13 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# 下载并解压Selenium IDE扩展
+# 下载并解压 Selenium IDE 扩展 (修复权限)
 # ===================================================================
 RUN wget --tries=3 -O /tmp/selenium-ide.crx "https://raw.githubusercontent.com/workerspages/ubuntu-automation/aio/addons/selenium-ide.crx" && \
     mkdir -p /opt/selenium-ide-unpacked && \
     python3 -c "import zipfile; zf = zipfile.ZipFile('/tmp/selenium-ide.crx'); zf.extractall('/opt/selenium-ide-unpacked'); zf.close()" && \
+    # --- 关键修复：将插件目录所有权交给 headless 用户，防止权限拒绝 ---
+    chown -R headless:headless /opt/selenium-ide-unpacked && \
     rm /tmp/selenium-ide.crx
 
 # ===================================================================
