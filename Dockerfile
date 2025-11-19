@@ -115,7 +115,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# VNC xstartup脚本 (关键修改: 导出 DBUS 地址)
+# VNC xstartup脚本
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
     chown headless:headless /home/headless/.vnc
@@ -158,7 +158,7 @@ EOF
 RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 配置 AutoKey 自启动 (关键修改: 让桌面环境启动它)
+# 配置 AutoKey 自启动
 # ===================================================================
 RUN mkdir -p /home/headless/.config/autostart && \
     printf "[Desktop Entry]\nType=Application\nName=AutoKey\nExec=autokey-gtk\nTerminal=false\n" > /home/headless/.config/autostart/autokey.desktop && \
@@ -222,12 +222,19 @@ RUN mkdir -p /opt/playwright && \
 # 复制应用代码和配置
 # ===================================================================
 COPY web-app/ /app/web-app/
-# Force rebuild mark 2024
-COPY scripts/ /app/scripts/
 COPY nginx.conf /etc/nginx/nginx.conf
 
+# -------------------------------------------------------------------
+# [关键修改] 强制刷新缓存并复制本地脚本
+# -------------------------------------------------------------------
+# 这一行会强制 Docker 认为这层之后都是新的，必须重新构建
+RUN echo "Force Rebuild 2025-11-20-FIX-02" > /dev/null
+
+# 复制本地的 scripts 目录（包含已修复 Cloudflare 逻辑的 entrypoint.sh）
+COPY scripts/ /app/scripts/
+
 # ===================================================================
-# Supervisor配置 (关键修改: WebApp 等待并加载 DBUS 环境)
+# Supervisor配置
 # ===================================================================
 RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
 [supervisord]
@@ -263,8 +270,6 @@ stderr_logfile=/app/logs/novnc-error.log
 user=headless
 priority=20
 
-# 注意：AutoKey 现在由 XFCE 自启动管理，不再这里配置
-
 [program:nginx]
 command=/usr/sbin/nginx -g "daemon off;"
 autostart=true
@@ -274,8 +279,6 @@ stderr_logfile=/app/logs/nginx-error.log
 priority=30
 
 [program:webapp]
-# 核心技巧：等待 .dbus-env 生成，然后 source 它，再启动 gunicorn
-# 这样 WebApp 就拥有了控制 AutoKey 的钥匙
 command=/bin/bash -c "while [ ! -f /home/headless/.dbus-env ]; do sleep 1; done; source /home/headless/.dbus-env; exec /opt/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:8000 app:app"
 directory=/app/web-app
 autostart=true
@@ -328,77 +331,9 @@ EOF
 RUN chmod +x /usr/local/bin/init-database
 
 # ===================================================================
-# Entrypoint脚本
+# ⚠️ 注意：这里删除了原来的 RUN cat ... entrypoint.sh 块
+# 之前的问题就是这里重新生成了一个旧文件，覆盖了 COPY 进去的新文件
 # ===================================================================
-RUN cat << 'EOF' > /app/scripts/entrypoint.sh
-#!/bin/bash
-set -e
-
-echo "==================================="
-echo "Ubuntu 自动化平台启动中..."
-echo "==================================="
-
-# 检查 Chrome 安装
-if command -v google-chrome-stable &> /dev/null; then
-    echo "✅ Google Chrome 已安装"
-    google-chrome-stable --version
-else
-    echo "❌ Google Chrome 未找到"
-fi
-
-# 配置 VNC 密码
-echo "配置 VNC 密码..."
-mkdir -p /home/headless/.vnc
-chown headless:headless /home/headless/.vnc
-su - headless -c "echo ${VNC_PW:-admin} | vncpasswd -f > /home/headless/.vnc/passwd"
-chmod 600 /home/headless/.vnc/passwd
-chown headless:headless /home/headless/.vnc/passwd
-
-echo "VNC密码文件已生成"
-
-mkdir -p /app/data /app/logs /home/headless/Downloads
-chown -R headless:headless /app /home/headless /opt/venv
-
-echo "初始化数据库..."
-/usr/local/bin/init-database || {
-    echo "数据库初始化备用方法..."
-    cd /app/web-app
-    /opt/venv/bin/python3 << 'PYEOF'
-import sys
-sys.path.insert(0, '/app/web-app')
-try:
-    from app import app, db, User
-    import os
-    with app.app_context():
-        db.create_all()
-        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        if not User.query.filter_by(username=admin_username).first():
-            user = User(username=admin_username)
-            user.password = admin_password
-            db.session.add(user)
-            db.session.commit()
-            print(f"✅ Admin user {admin_username} created")
-        else:
-            print(f"✅ Admin user {admin_username} exists")
-except Exception as e:
-    print(f"❌ Database init failed: {e}")
-    import traceback
-    traceback.print_exc()
-PYEOF
-}
-
-echo "修正数据库权限..."
-chown -R headless:headless /app/data
-
-echo "==================================="
-echo "启动服务..."
-echo "==================================="
-
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/services.conf
-EOF
-
-RUN chmod +x /app/scripts/entrypoint.sh
 
 # ===================================================================
 # 设置权限及端口暴露
