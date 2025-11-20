@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gir1.2-gtk-3.0 build-essential pkg-config gcc g++ make libffi-dev libssl-dev \
     libxml2-dev libxslt1-dev zlib1g-dev libjpeg-dev libpng-dev \
     gsettings-desktop-schemas dconf-cli gnome-icon-theme policykit-1 \
-    xautomation kdialog imagemagick nginx nodejs npm unzip libnss3 libatk-bridge2.0-0 \
+    xautomation xdotool kdialog imagemagick nginx nodejs npm unzip libnss3 libatk-bridge2.0-0 \
     libx11-xcb1 libxcomposite1 libxrandr2 libasound2 libpangocairo-1.0-0 libpango-1.0-0 \
     libcups2 libdbus-1-3 libxdamage1 libxfixes3 libgbm1 libxshmfence1 libxext6 libdrm2 \
     libwayland-client0 libwayland-cursor0 libatspi2.0-0 libepoxy0 \
