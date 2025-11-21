@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ aio ]
+    branches: [ aio-20251121 ]
     tags: [ "v*" ]
   workflow_dispatch: {}
 
