@@ -10,6 +10,10 @@ import random
 import logging
 import os
 import requests
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from email.header import Header
 from pathlib import Path
 from datetime import datetime
 
@@ -46,6 +50,64 @@ HUMAN_LIKE_DELAYS = {
     'scroll_delay': 0.5,
     'click_delay': 0.3
 }
+
+def get_email_config():
+    """从环境变量获取邮件配置"""
+    return {
+        'enabled': os.environ.get('ENABLE_EMAIL_NOTIFY', 'false').lower() == 'true',
+        'host': os.environ.get('SMTP_HOST'),
+        'port': int(os.environ.get('SMTP_PORT', 587)),
+        'user': os.environ.get('SMTP_USER'),
+        'password': os.environ.get('SMTP_PASSWORD'),
+        'from_addr': os.environ.get('EMAIL_FROM'),
+        'to_addr': os.environ.get('EMAIL_TO')
+    }
+
+def send_email_notification(script_name, success, message):
+    """发送邮件通知"""
+    config = get_email_config()
+    
+    if not config['enabled']:
+        return
+    
+    if not all([config['host'], config['user'], config['password'], config['to_addr']]):
+        logger.warning("邮件配置不完整，跳过发送")
+        return
+
+    status_text = '✅ 执行成功' if success else '❌ 执行失败'
+    subject = f"[{status_text}] 自动化任务通知: {script_name}"
+    
+    # 邮件正文内容
+    body = f"""
+    <h3>自动化任务执行报告</h3>
+    <p><b>任务名称:</b> {script_name}</p>
+    <p><b>执行状态:</b> <span style="color: {'green' if success else 'red'}">{status_text}</span></p>
+    <p><b>执行时间:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+    <hr>
+    <p><b>详细日志:</b></p>
+    <pre style="background-color: #f4f4f4; padding: 10px; border-radius: 5px; white-space: pre-wrap; word-wrap: break-word;">{message}</pre>
+    """
+
+    msg = MIMEMultipart()
+    msg['From'] = config['from_addr'] or config['user']
+    msg['To'] = config['to_addr']
+    msg['Subject'] = Header(subject, 'utf-8')
+    msg.attach(MIMEText(body, 'html', 'utf-8'))
+
+    try:
+        # 连接 SMTP 服务器
+        if config['port'] == 465:
+            server = smtplib.SMTP_SSL(config['host'], config['port'])
+        else:
+            server = smtplib.SMTP(config['host'], config['port'])
+            server.starttls() # 启用 TLS 加密
+        
+        server.login(config['user'], config['password'])
+        server.sendmail(config['from_addr'] or config['user'], config['to_addr'], msg.as_string())
+        server.quit()
+        logger.info(f"邮件通知已发送至: {config['to_addr']}")
+    except Exception as e:
+        logger.error(f"发送邮件通知失败: {e}")
 
 def send_telegram_notification(script_name, success, message, bot_token, chat_id):
     """
@@ -345,8 +407,13 @@ if __name__ == '__main__':
     executor = SeleniumIDEExecutor(script_path)
     success, message = executor.execute()
     
+    script_name = Path(script_path).name
+    
+    # 发送 Telegram
     if bot_token and chat_id:
-        script_name = Path(script_path).name
         send_telegram_notification(script_name, success, message, bot_token, chat_id)
+    
+    # 发送邮件
+    send_email_notification(script_name, success, message)
     
     sys.exit(0 if success else 1)
