@@ -123,6 +123,26 @@ RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
+# +++ 新增配置：将 Chrome 设置为系统默认浏览器 +++
+# ===================================================================
+# 1. 设置 update-alternatives 优先级，使其高于 Firefox
+RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/google-chrome-stable 200 && \
+    update-alternatives --set x-www-browser /usr/bin/google-chrome-stable && \
+    update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/google-chrome-stable 200 && \
+    update-alternatives --set gnome-www-browser /usr/bin/google-chrome-stable
+
+# 2. 配置 XDG/MIME 默认关联 (针对 XFCE 桌面环境点击链接)
+RUN mkdir -p /etc/xdg && \
+    { \
+        echo '[Default Applications]'; \
+        echo 'text/html=google-chrome.desktop'; \
+        echo 'x-scheme-handler/http=google-chrome.desktop'; \
+        echo 'x-scheme-handler/https=google-chrome.desktop'; \
+        echo 'x-scheme-handler/about=google-chrome.desktop'; \
+        echo 'x-scheme-handler/unknown=google-chrome.desktop'; \
+    } >> /etc/xdg/mimeapps.list
+
+# ===================================================================
 # 关闭 Chrome 对命令行标记的安全横幅（含 --no-sandbox 提示）
 # ===================================================================
 RUN mkdir -p /etc/opt/chrome/policies/managed && \
