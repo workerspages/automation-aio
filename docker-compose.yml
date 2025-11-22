@@ -2,12 +2,7 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    # 修改镜像名称(根据您的构建设置)
-    image: ghcr.io/workerspages/ubuntu-automation:aio
-    # 或使用本地构建
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
+    image: ghcr.io/workerspages/ubuntu-automation:aio-20251121
     container_name: ubuntu-automation
     ports:
       - "5000:5000"
@@ -16,18 +11,34 @@ services:
       - SECRET_KEY=your-secret-key-change-this
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin123
+      # Telegram 配置 (保持不变)
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
+      
+      # === 新增：邮件通知配置 ===
+      - ENABLE_EMAIL_NOTIFY=true
+      # SMTP服务器地址 (例如 Gmail: smtp.gmail.com, QQ: smtp.qq.com)
+      - SMTP_HOST=smtp.gmail.com
+      # SMTP端口 (TLS通常为587, SSL通常为465)
+      - SMTP_PORT=587
+      # 发件人邮箱账号
+      - SMTP_USER=your_email@gmail.com
+      # 邮箱密码或应用专用密码 (不要使用登录密码)
+      - SMTP_PASSWORD=your_app_password
+      # 发件人显示地址
+      - EMAIL_FROM=your_email@gmail.com
+      # 收件人地址
+      - EMAIL_TO=receiver@example.com
+      
       - ENABLE_CLOUDFLARE_TUNNEL=false
       - CLOUDFLARE_TUNNEL_TOKEN=
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
-      - ./data:/app/data  # 持久化数据库
-      - ./logs:/app/logs  # 持久化日志
+      - ./data:/app/data
+      - ./logs:/app/logs
     restart: unless-stopped
     shm_size: '2gb'
-    # 添加健康检查
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
