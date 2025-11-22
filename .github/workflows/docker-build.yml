@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ aio-20251121 ]
+    branches: [ aio-personal-browser ]
     tags: [ "v*" ]
   workflow_dispatch: {}
 
