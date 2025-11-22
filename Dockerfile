@@ -204,6 +204,34 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
+# +++ 新增：注入浏览器个人配置 (Zip版) +++
+# ===================================================================
+# 1. 复制压缩包到临时目录 (假设 zip 文件名与浏览器对应)
+COPY browser-configs/chrome.zip /tmp/chrome.zip
+COPY browser-configs/firefox.zip /tmp/firefox.zip
+
+# 2. 解压配置、清理锁文件、修复权限
+RUN mkdir -p /home/headless/.config/google-chrome && \
+    mkdir -p /home/headless/.mozilla && \
+    \
+    echo "正在解压 Chrome 配置..." && \
+    unzip -q /tmp/chrome.zip -d /home/headless/.config/google-chrome/ && \
+    \
+    echo "正在解压 Firefox 配置..." && \
+    unzip -q /tmp/firefox.zip -d /home/headless/.mozilla/ && \
+    \
+    echo "清理临时文件和浏览器锁文件(防止启动崩溃)..." && \
+    rm /tmp/chrome.zip /tmp/firefox.zip && \
+    rm -f /home/headless/.config/google-chrome/SingletonLock && \
+    rm -f /home/headless/.config/google-chrome/SingletonSocket && \
+    rm -f /home/headless/.config/google-chrome/SingletonCookie && \
+    find /home/headless/.mozilla -name "lock" -delete && \
+    find /home/headless/.mozilla -name ".parentlock" -delete && \
+    \
+    echo "修正文件权限..." && \
+    chown -R headless:headless /home/headless/.config /home/headless/.mozilla
+
+# ===================================================================
 # VNC xstartup脚本
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
