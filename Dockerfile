@@ -143,12 +143,18 @@ RUN mkdir -p /etc/xdg && \
     } >> /etc/xdg/mimeapps.list
 
 # ===================================================================
-# 关闭 Chrome 对命令行标记的安全横幅（含 --no-sandbox 提示）
+# 配置 Chrome 企业策略 (禁用默认浏览器检查、禁用安全横幅、禁用首次运行欢迎页)
 # ===================================================================
 RUN mkdir -p /etc/opt/chrome/policies/managed && \
-    printf '{ "CommandLineFlagSecurityWarningsEnabled": false }\n' \
-      > /etc/opt/chrome/policies/managed/disable_flag_warning.json && \
-    chmod 644 /etc/opt/chrome/policies/managed/disable_flag_warning.json
+    echo '{ \
+      "CommandLineFlagSecurityWarningsEnabled": false, \
+      "DefaultBrowserSettingEnabled": false, \
+      "MetricsReportingEnabled": false, \
+      "RestoreOnStartup": 4, \
+      "WelcomePageOnOSUpgradeEnabled": false, \
+      "CheckDefaultBrowser": false \
+    }' > /etc/opt/chrome/policies/managed/managed_policies.json && \
+    chmod 644 /etc/opt/chrome/policies/managed/managed_policies.json
 
 # ===================================================================
 # 配置 Firefox 插件 (可选，需确保本地有此目录，否则可注释掉)
