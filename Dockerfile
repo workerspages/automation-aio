@@ -388,7 +388,7 @@ stderr_logfile=/app/logs/nginx-error.log
 priority=30
 
 [program:webapp]
-command=/bin/bash -c "while [ ! -f /home/headless/.dbus-env ]; do sleep 1; done; source /home/headless/.dbus-env; exec /opt/venv/bin/gunicorn --workers 4 --bind 0.0.0.0:8000 app:app"
+command=/bin/bash -c "while [ ! -f /home/headless/.dbus-env ]; do sleep 1; done; source /home/headless/.dbus-env; exec /opt/venv/bin/gunicorn --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:8000 app:app"
 directory=/app/web-app
 autostart=true
 autorestart=true
