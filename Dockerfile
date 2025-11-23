@@ -115,11 +115,11 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 配置 Chrome 启动包装器 (No-Sandbox)
+# 配置 Chrome 启动包装器 (No-Sandbox + 禁止默认浏览器检查)
 # ===================================================================
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
-    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu "$@"' >> /usr/bin/google-chrome-stable && \
+    echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu --no-default-browser-check --no-first-run "$@"' >> /usr/bin/google-chrome-stable && \
     chmod +x /usr/bin/google-chrome-stable
 
 # ===================================================================
