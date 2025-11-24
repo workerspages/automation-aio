@@ -216,7 +216,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
 # ===================================================================
 # +++ 新增：注入浏览器个人配置 (Zip版) +++
 # ===================================================================
-# 1. 复制压缩包到临时目录 (假设 zip 文件名与浏览器对应)
+# 1. 复制压缩包到临时目录
 COPY browser-configs/chrome.zip /tmp/chrome.zip
 COPY browser-configs/firefox.zip /tmp/firefox.zip
 
@@ -286,7 +286,7 @@ EOF
 RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 配置 AutoKey 自启动
+# 配置 AutoKey 自启动 (双重保障：Desktop Entry + Supervisor)
 # ===================================================================
 RUN mkdir -p /home/headless/.config/autostart && \
     printf "[Desktop Entry]\nType=Application\nName=AutoKey\nExec=autokey-gtk\nTerminal=false\n" > /home/headless/.config/autostart/autokey.desktop && \
@@ -402,6 +402,16 @@ stderr_logfile=/app/logs/webapp-error.log
 user=headless
 environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH)s",DISPLAY=":1",PLAYWRIGHT_BROWSERS_PATH="/opt/playwright"
 priority=40
+
+[program:autokey]
+command=/usr/bin/autokey-gtk --verbose
+environment=DISPLAY=":1"
+user=headless
+autostart=true
+autorestart=true
+stdout_logfile=/app/logs/autokey.log
+stderr_logfile=/app/logs/autokey-error.log
+priority=25
 EOF
 
 # ===================================================================
