@@ -58,7 +58,7 @@ RUN add-apt-repository -y ppa:mozillateam/ppa && \
 # 安装系统依赖 (含 Firefox .deb 版本) & 卸载屏保
 # ===================================================================
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git vim nano sudo tzdata locales net-tools \
+    git vim nano sudo tzdata locales net-tools openssh-client \
     iproute2 iputils-ping supervisor cron sqlite3 fonts-wqy-microhei \
     fonts-wqy-zenhei fonts-noto-cjk fonts-noto-cjk-extra language-pack-zh-hans \
     x11-utils x11-xserver-utils x11-apps xauth xserver-xorg-core xserver-xorg-video-dummy \
