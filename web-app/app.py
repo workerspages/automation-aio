@@ -46,7 +46,7 @@ class Task(db.Model):
     enabled = db.Column(db.Boolean, default=True)
     last_run = db.Column(db.DateTime)
     last_status = db.Column(db.String(50))
-    # 修改点 1: 使用 datetime.now 确保创建时间符合系统时区
+    # 使用 datetime.now 确保创建时间符合系统时区
     created_at = db.Column(db.DateTime, default=datetime.now)
 
 @login_manager.user_loader
@@ -193,6 +193,33 @@ def run_task_now(task_id):
     execute_script(task.id)
     return jsonify({'success': True, 'message': '任务已开始执行，请在VNC窗口查看执行过程'})
 
+# --- 新增: 切换任务启用状态的接口 ---
+@app.route('/api/tasks/<int:task_id>/toggle', methods=['POST'])
+@login_required
+def toggle_task(task_id):
+    task = db.session.get(Task, task_id)
+    if not task:
+        return jsonify({'error': 'Task not found'}), 404
+    
+    # 切换状态
+    task.enabled = not task.enabled
+    db.session.commit()
+    
+    # 更新调度器
+    try:
+        if task.enabled:
+            schedule_task(task)
+            logger.info(f"Task {task.id} enabled and scheduled")
+        else:
+            scheduler.remove_job(f'task_{task.id}')
+            logger.info(f"Task {task.id} disabled and removed from scheduler")
+    except Exception as e:
+        # 即使调度器报错（如任务本来就不在调度中），也视为成功切换了数据库状态
+        logger.warning(f"Scheduler update warning for task {task.id}: {e}")
+        pass
+
+    return jsonify({'success': True, 'enabled': task.enabled})
+
 # --- 核心调度逻辑 ---
 def schedule_task(task):
     if task.enabled:
@@ -241,7 +268,7 @@ def execute_script(task_id):
         task = db.session.get(Task, task_id)
         if not task: return False
         
-        # 修改点 2: 使用 datetime.now() 获取当前系统时间(含时区修正)
+        # 使用 datetime.now() 获取当前系统时间(含时区修正)
         task.last_run = datetime.now()
         db.session.commit()
 
