@@ -4,25 +4,28 @@
     <meta charset="UTF-8" />
     <title>自动化管理平台</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 <nav>
     <div class="nav-content">
         <div class="logo">
             <span class="icon">🤖</span>
-            <h1>自动化管理平台</h1>
+            <h1>Automation AIO</h1>
         </div>
-        <div>
-         <a href="/vnc/vnc.html?path=vnc/websockify" target="_blank" class="logout-btn" style="margin-right: 15px;">远程桌面</a>
-         <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
+        <div class="nav-links">
+            <a href="/vnc/vnc.html?path=vnc/websockify" target="_blank" class="logout-btn">🖥️ 远程桌面</a>
+            <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
         </div>
     </div>
 </nav>
 
 <div class="container">
     <div class="header">
-        <h2>定时任务管理</h2>
-        <button class="btn-primary" onclick="openAddModal()">+ 添加任务</button>
+        <h2>任务调度中心</h2>
+        <button class="btn-primary" onclick="openAddModal()">
+            <span>+</span> 新建任务
+        </button>
     </div>
 
     <div class="tasks-grid">
@@ -31,18 +34,20 @@
             <div class="task-header">
                 <h3>{{ task.name }}</h3>
                 <span class="status-badge {% if task.enabled %}status-active{% else %}status-inactive{% endif %}">
-                    {{ '运行中' if task.enabled else '已暂停' }}
+                    {{ '● 运行中' if task.enabled else '○ 已暂停' }}
                 </span>
             </div>
+            
             <div class="task-info">
-                <p><strong>脚本:</strong> {{ task.script_path }}</p>
-                <p><strong>定时:</strong> {{ task.cron_expression }}</p>
-                <p><strong>上次运行:</strong> {{ task.last_run.strftime('%Y-%m-%d %H:%M:%S') if task.last_run else '未运行' }}</p>
+                <p><strong>脚本</strong> {{ task.script_path }}</p>
+                <p><strong>周期</strong> {{ task.cron_expression }}</p>
+                <p><strong>状态</strong> {{ task.last_run.strftime('%m-%d %H:%M') if task.last_run else '等待调度' }}</p>
             </div>
+
             <div class="task-actions">
-                <button class="btn-secondary" onclick="editTask({{ task.id }})">编辑</button>
-                <button class="btn-success" onclick="runTaskNow({{ task.id }})">立即执行</button>
-                <button class="btn-danger" onclick="deleteTask({{ task.id }})">删除</button>
+                <button class="btn-success" onclick="runTaskNow({{ task.id }})">▶ 运行</button>
+                <button class="btn-secondary" onclick="editTask({{ task.id }})">✎ 编辑</button>
+                <button class="btn-danger" onclick="deleteTask({{ task.id }})">🗑 删除</button>
             </div>
         </div>
         {% endfor %}
@@ -55,38 +60,42 @@
             <h2 id="modalTitle">添加任务</h2>
             <span class="close" onclick="closeModal()">&times;</span>
         </div>
+        
         <form id="taskForm" onsubmit="saveTask(event)">
             <input type="hidden" id="taskId" />
+            
             <div class="form-group">
                 <label>任务名称</label>
-                <input type="text" id="taskName" required placeholder="例如：百度定时搜索" />
+                <input type="text" id="taskName" required placeholder="给任务起个名字..." />
             </div>
+            
             <div class="form-group">
-                <label>选择脚本</label>
+                <label>选择脚本文件</label>
                 <select id="scriptPath" required>
-                    <option value="">-- 请选择脚本 --</option>
+                    <option value="">-- 请选择 /Downloads 目录下的脚本 --</option>
                     {% for script in scripts %}
                     <option value="{{ script.path }}">{{ script.name }}</option>
                     {% endfor %}
                 </select>
             </div>
+            
             <div class="form-group">
-                <label>定时执行</label>
+                <label>Cron 调度表达式</label>
                 <div class="cron-presets">
-                    <button type="button" class="preset-btn" onclick="setCron('*/5 * * * *')">每5分钟</button>
+                    <button type="button" class="preset-btn" onclick="setCron('*/5 * * * *')">每5分</button>
                     <button type="button" class="preset-btn" onclick="setCron('0 * * * *')">每小时</button>
                     <button type="button" class="preset-btn" onclick="setCron('0 9 * * *')">每天9点</button>
-                    <button type="button" class="preset-btn" onclick="setCron('0 9,12,18 * * *')">每天9/12/18点</button>
-                    <button type="button" class="preset-btn" onclick="setCron('0 0 * * 1')">每周一</button>
+                    <button type="button" class="preset-btn" onclick="setCron('0 9,18 * * *')">早晚</button>
                 </div>
-                <input type="text" id="cronExpression" required placeholder="或自定义: 0 9 * * *" />
+                <input type="text" id="cronExpression" required placeholder="例如: 0 9 * * *" />
                 <small class="help-text" id="cronHelp">
-                    格式: 分 时 日 月 周 (例: 0 9 * * * 表示每天9点)
+                    预览: 请输入表达式以查看说明
                 </small>
             </div>
+            
             <div class="form-actions">
                 <button type="button" class="btn-secondary" onclick="closeModal()">取消</button>
-                <button type="submit" class="btn-primary">保存</button>
+                <button type="submit" class="btn-primary">保存配置</button>
             </div>
         </form>
     </div>
