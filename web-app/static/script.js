@@ -82,6 +82,24 @@ function runTaskNow(taskId) {
         });
 }
 
+function toggleTask(taskId) {
+    // 不弹出确认框，直接切换，体验更流畅
+    fetch(`/api/tasks/${taskId}/toggle`, {
+        method: 'POST'
+    })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                location.reload();
+            } else {
+                alert('状态切换失败: ' + (result.error || '未知错误'));
+            }
+        })
+        .catch(error => {
+            alert('操作失败: ' + error);
+        });
+}
+
 function deleteTask(taskId) {
     if (!confirm('确定删除此任务吗？')) {
         return;
