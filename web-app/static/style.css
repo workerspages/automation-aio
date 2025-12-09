@@ -11,6 +11,8 @@
     --text-muted: #94a1b2;
     --success-color: #2cb67d;
     --danger-color: #ef4565;
+    --warning-color: #ff8906;
+    --info-color: #3da9fc;
     --card-radius: 16px;
     --transition-speed: 0.3s;
 }
@@ -136,8 +138,13 @@ button {
     cursor: pointer;
     transition: all var(--transition-speed);
     outline: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
 }
 
+/* 主按钮 */
 .btn-primary {
     background: var(--primary-color);
     color: white;
@@ -147,11 +154,7 @@ button {
     font-size: 0.95rem;
     font-weight: 600;
     box-shadow: 0 4px 14px rgba(127, 90, 240, 0.4);
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
 }
-
 .btn-primary:hover {
     background: var(--primary-hover);
     transform: translateY(-2px);
@@ -243,10 +246,10 @@ button {
     min-width: 40px;
 }
 
-/* 操作按钮组 */
+/* 操作按钮组 - 修改为两行布局 */
 .task-actions {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr; /* 第一行两个按钮 */
     gap: 10px;
     border-top: 1px solid var(--glass-border);
     padding-top: 20px;
@@ -257,33 +260,65 @@ button {
     border-radius: 8px;
     font-size: 0.85rem;
     font-weight: 500;
-    border: 1px solid transparent;
     transition: all 0.2s;
+    width: 100%;
 }
 
+/* 按钮变体 */
+
+/* Secondary (幽灵按钮 - 用于取消/编辑) */
 .btn-secondary {
-    background: rgba(255, 255, 255, 0.1);
-    color: var(--text-main);
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid transparent;
 }
-.btn-secondary:hover { background: rgba(255, 255, 255, 0.2); }
+.btn-secondary:hover { 
+    background: rgba(255, 255, 255, 0.1); 
+    color: var(--text-main);
+    border-color: var(--glass-border);
+}
 
+/* Success (运行) */
 .btn-success {
     background: rgba(44, 182, 125, 0.15);
     color: #2cb67d;
-    border-color: rgba(44, 182, 125, 0.2);
+    border: 1px solid rgba(44, 182, 125, 0.2);
 }
 .btn-success:hover { 
     background: #2cb67d; 
     color: white; 
 }
 
+/* Danger (删除) */
 .btn-danger {
     background: rgba(239, 69, 101, 0.15);
     color: #ef4565;
-    border-color: rgba(239, 69, 101, 0.2);
+    border: 1px solid rgba(239, 69, 101, 0.2);
 }
 .btn-danger:hover {
     background: #ef4565;
+    color: white;
+}
+
+/* Warning (暂停) */
+.btn-warning {
+    background: rgba(255, 137, 6, 0.15);
+    color: #ff8906;
+    border: 1px solid rgba(255, 137, 6, 0.2);
+}
+.btn-warning:hover {
+    background: #ff8906;
+    color: white;
+}
+
+/* Info (启用) */
+.btn-info {
+    background: rgba(61, 169, 252, 0.15);
+    color: #3da9fc;
+    border: 1px solid rgba(61, 169, 252, 0.2);
+}
+.btn-info:hover {
+    background: #3da9fc;
     color: white;
 }
 
