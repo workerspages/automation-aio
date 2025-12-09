@@ -3,29 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 全能型自动化平台</title>
+    <title>登录 - Automation Platform</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body class="login-page">
-    <div class="login-container">
-        <div class="login-card">
-            <h1>🤖 自动化管理平台</h1>
+    <div class="login-card">
+        <div class="login-header">
+            <span style="font-size: 48px; display: block; margin-bottom: 10px;">🤖</span>
+            <h1>自动化中控台</h1>
             <p class="subtitle">Ubuntu Automation AIO Platform</p>
-            <form method="POST" action="{{ url_for('login') }}">
-                <div class="form-group">
-                    <input type="text" name="username" placeholder="用户名" required>
-                </div>
-                <div class="form-group">
-                    <input type="password" name="password" placeholder="密码" required>
-                </div>
-                {% with messages = get_flashed_messages() %}
-                    {% if messages %}
-                        <div class="alert">{{ messages[0] }}</div>
-                    {% endif %}
-                {% endwith %}
-                <button type="submit" class="btn-primary">登录</button>
-            </form>
         </div>
+        
+        <form method="POST" action="{{ url_for('login') }}">
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    <div class="alert">⚠️ {{ messages[0] }}</div>
+                {% endif %}
+            {% endwith %}
+
+            <div class="form-group">
+                <input type="text" name="username" placeholder="管理员账号" required autocomplete="off">
+            </div>
+            
+            <div class="form-group">
+                <input type="password" name="password" placeholder="访问密码" required>
+            </div>
+            
+            <button type="submit" class="btn-primary">
+                进入控制台 <span>→</span>
+            </button>
+        </form>
     </div>
 </body>
 </html>
