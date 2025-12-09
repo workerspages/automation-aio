@@ -45,9 +45,16 @@
             </div>
 
             <div class="task-actions">
-                <button class="btn-success" onclick="runTaskNow({{ task.id }})">▶ 运行</button>
+                <button class="btn-success" onclick="runTaskNow({{ task.id }})">▶ 立即运行</button>
+                
+                {% if task.enabled %}
+                <button class="btn-warning" onclick="toggleTask({{ task.id }})">⏸ 暂停任务</button>
+                {% else %}
+                <button class="btn-info" onclick="toggleTask({{ task.id }})">▶ 启用任务</button>
+                {% endif %}
+
                 <button class="btn-secondary" onclick="editTask({{ task.id }})">✎ 编辑</button>
-                <button class="btn-danger" onclick="deleteTask({{ task.id }})">🗑 删除</button>
+                <button class="btn-secondary" onclick="deleteTask({{ task.id }})">🗑 删除</button>
             </div>
         </div>
         {% endfor %}
