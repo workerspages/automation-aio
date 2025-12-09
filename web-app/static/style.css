@@ -270,12 +270,12 @@ button {
 .btn-secondary {
     background: transparent;
     color: var(--text-muted);
-    border: 1px solid transparent;
+    border: 1px solid rgba(148, 161, 178, 0.3);
 }
 .btn-secondary:hover { 
-    background: rgba(255, 255, 255, 0.1); 
+    background: rgba(255, 255, 255, 0.08); 
     color: var(--text-main);
-    border-color: var(--glass-border);
+    border-color: var(--text-muted);
 }
 
 /* Success (运行) */
