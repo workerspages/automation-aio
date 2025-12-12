@@ -6,7 +6,9 @@
 [![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.10-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-Web_UI-000000?style=flat&logo=flask&logoColor=white)](https://flask.palletsprojects.com/)
-[![Selenium](https://img签到**、**GUI 宏操作**，还是**定时截图监控**，这个项目都能满足，并且可以通过 Web 界面轻松管理和调度。
+[![Playwright](https://img.shields.io/badge/Playwright-Supported-2EAD33?style=flat&logo=playwright&logoColor=white)](https://playwright.dev/)
+
+**签到**、**GUI 宏操作**，还是**定时截图监控**，这个项目都能满足，并且可以通过 Web 界面轻松管理和调度。
 
 ---
 
@@ -14,8 +16,8 @@
 
 ### 🖥️ 可视化与交互
 *   **Web 管理面板**：基于 Flask 开发，支持任务的添加、编辑、删除和**立即执行**。
-*   **VNC 远程桌面**：内置 NoVNC，直接在浏览器中查看.shields.io/badge/Selenium-IDE_Support-43B02A?style=flat&logo=selenium&logoColor=white)](https://www.selenium.dev/)
-[![Playwright](https://img.shields.io/badge/Playwright-Supported-2EAD33?style=flat&logo=playwright&logoColor=white)](https://playwright.dev/)
+*   **VNC 远程桌面**：内置 NoVNC，直接在浏览器中查看。
+
 
 这是一个基于 Docker 的开箱即用自动化平台。它集成了图形化桌面 (自动化脚本的实时执行过程（所见即所得）。
 *   **异步任务执行**：点击执行后后台运行，不会卡顿网页，支持长时间运行的任务。
