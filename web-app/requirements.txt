@@ -11,3 +11,4 @@ cryptography>=41.0.7
 gunicorn>=22.0.0
 opencv-python-headless
 playwright-stealth
+pytz
