@@ -4,7 +4,7 @@ import json
 import logging
 import time
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
@@ -81,13 +81,17 @@ class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     script_path = db.Column(db.String(500), nullable=False)
-    cron_expression = db.Column(db.String(100), nullable=False)
+    cron_expression = db.Column(db.String(100), nullable=True) # 允许为空，如果是随机模式
     enabled = db.Column(db.Boolean, default=True)
     last_run = db.Column(db.DateTime)
     last_status = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.now)
-    schedule_type = db.Column(db.String(20), default='cron') 
-    random_delay_max = db.Column(db.Integer, default=0)
+    
+    # === 新增字段 ===
+    schedule_type = db.Column(db.String(20), default='cron') # 'cron' or 'random'
+    random_start = db.Column(db.String(10), nullable=True)   # 'HH:MM'
+    random_end = db.Column(db.String(10), nullable=True)     # 'HH:MM'
+    random_delay_max = db.Column(db.Integer, default=0)      # 保留字段，暂不使用
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -266,19 +270,37 @@ def get_available_scripts():
 def manage_tasks():
     if request.method == 'POST':
         data = request.json
+        # 获取新字段
+        schedule_type = data.get('schedule_type', 'cron')
+        random_start = data.get('random_start')
+        random_end = data.get('random_end')
+        cron_expression = data.get('cron_expression')
+
+        # 如果是随机模式，覆盖 cron_expression
+        if schedule_type == 'random' and random_start:
+            # 存入数据库的 Cron 表达式设置为 开始时间，具体随机由 scheduler 处理
+            try:
+                hour, minute = random_start.split(':')
+                # 格式: 分 时 * * *
+                cron_expression = f"{int(minute)} {int(hour)} * * *"
+            except:
+                pass
+
         task = Task(
             name=data['name'],
             script_path=data['script_path'],
-            cron_expression=data['cron_expression'],
+            cron_expression=cron_expression,
             enabled=data.get('enabled', True),
-            schedule_type=data.get('schedule_type', 'cron'),
-            random_delay_max=data.get('random_delay_max', 0)
+            schedule_type=schedule_type,
+            random_start=random_start,
+            random_end=random_end
         )
         db.session.add(task)
         db.session.commit()
         if task.enabled:
             schedule_task(task)
         return jsonify({'success': True, 'task_id': task.id})
+    
     tasks = Task.query.all()
     return jsonify([
         {
@@ -290,7 +312,8 @@ def manage_tasks():
             'last_run': t.last_run.isoformat() if t.last_run else None,
             'last_status': t.last_status,
             'schedule_type': getattr(t, 'schedule_type', 'cron'),
-            'random_delay_max': getattr(t, 'random_delay_max', 0)
+            'random_start': getattr(t, 'random_start', ''),
+            'random_end': getattr(t, 'random_end', '')
         } for t in tasks
     ])
 
@@ -299,6 +322,7 @@ def manage_tasks():
 def update_task(task_id):
     task = db.session.get(Task, task_id)
     if not task: return jsonify({'error': 'Task not found'}), 404
+    
     if request.method == 'GET':
         return jsonify({
             'id': task.id,
@@ -309,21 +333,40 @@ def update_task(task_id):
             'last_run': task.last_run.isoformat() if task.last_run else None,
             'last_status': task.last_status,
             'schedule_type': getattr(task, 'schedule_type', 'cron'),
-            'random_delay_max': getattr(task, 'random_delay_max', 0)
+            'random_start': getattr(task, 'random_start', ''),
+            'random_end': getattr(task, 'random_end', '')
         })
+    
     if request.method == 'DELETE':
         try: scheduler.remove_job(f'task_{task_id}')
         except: pass
         db.session.delete(task)
         db.session.commit()
         return jsonify({'success': True})
+    
     if request.method == 'PUT':
         data = request.json
         task.name = data.get('name', task.name)
-        task.cron_expression = data.get('cron_expression', task.cron_expression)
         task.enabled = data.get('enabled', task.enabled)
-        task.schedule_type = data.get('schedule_type', 'cron')
-        task.random_delay_max = data.get('random_delay_max', 0)
+        
+        # 更新调度信息
+        schedule_type = data.get('schedule_type', 'cron')
+        task.schedule_type = schedule_type
+        
+        if schedule_type == 'random':
+            task.random_start = data.get('random_start')
+            task.random_end = data.get('random_end')
+            # 自动生成对应的 cron 表达式作为基础触发点
+            if task.random_start:
+                try:
+                    hour, minute = task.random_start.split(':')
+                    task.cron_expression = f"{int(minute)} {int(hour)} * * *"
+                except: pass
+        else:
+            task.cron_expression = data.get('cron_expression', task.cron_expression)
+            task.random_start = None
+            task.random_end = None
+
         db.session.commit()
         try: scheduler.remove_job(f'task_{task_id}')
         except: pass
@@ -522,31 +565,59 @@ def execute_autokey_script(script_stem, task_name):
 # --- 调度逻辑 ---
 def schedule_task(task):
     """
-    将任务添加到 APScheduler
+    将任务添加到 APScheduler。
+    核心升级：支持随机时间段抖动 (Jitter)。
     """
     if task.enabled:
         try:
-            trigger_kwargs = {}
-            if getattr(task, 'schedule_type', 'cron') == 'random':
-                jitter_seconds = getattr(task, 'random_delay_max', 0)
-                if jitter_seconds > 0:
-                    trigger_kwargs['jitter'] = jitter_seconds
+            trigger = None
             
-            trigger = CronTrigger.from_crontab(
-                task.cron_expression, 
-                timezone=SYSTEM_TZ, 
-                **trigger_kwargs
-            )
+            # 模式 1: 随机时间段
+            if getattr(task, 'schedule_type', 'cron') == 'random' and task.random_start and task.random_end:
+                try:
+                    start_h, start_m = map(int, task.random_start.split(':'))
+                    end_h, end_m = map(int, task.random_end.split(':'))
+                    
+                    # 使用当前日期来计算秒数差
+                    now = datetime.now(SYSTEM_TZ)
+                    start_dt = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
+                    end_dt = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
+                    
+                    # 如果结束时间小于开始时间，说明跨天 (例如 23:00 - 01:00)
+                    if end_dt < start_dt:
+                        end_dt += timedelta(days=1)
+                    
+                    # 计算最大延迟秒数
+                    diff_seconds = int((end_dt - start_dt).total_seconds())
+                    # 至少留 1 分钟窗口
+                    if diff_seconds < 60: diff_seconds = 60
+                    
+                    # 创建 Cron 触发器：固定在开始时间触发，但加上随机抖动
+                    trigger = CronTrigger(
+                        hour=start_h, 
+                        minute=start_m, 
+                        jitter=diff_seconds, 
+                        timezone=SYSTEM_TZ
+                    )
+                    logger.info(f"Task {task.name}: Random schedule {task.random_start}-{task.random_end} (window: {diff_seconds}s)")
+                except Exception as e:
+                    logger.error(f"Random schedule parse error for {task.name}: {e}")
+                    # 回退到普通 cron
+                    trigger = CronTrigger.from_crontab(task.cron_expression, timezone=SYSTEM_TZ)
             
-            job = scheduler.add_job(
-                func=execute_script,
-                trigger=trigger,
-                id=f'task_{task.id}',
-                args=[task.id],
-                replace_existing=True
-            )
+            # 模式 2: 普通 Cron
+            else:
+                trigger = CronTrigger.from_crontab(task.cron_expression, timezone=SYSTEM_TZ)
             
-            logger.info(f'✅ Task {task.name} scheduled. Next run: {job.next_run_time}')
+            if trigger:
+                job = scheduler.add_job(
+                    func=execute_script,
+                    trigger=trigger,
+                    id=f'task_{task.id}',
+                    args=[task.id],
+                    replace_existing=True
+                )
+                logger.info(f'✅ Task {task.name} scheduled. Next run range: {job.next_run_time}')
             
         except Exception as e:
             logger.error(f'Schedule failed for {task.name}: {e}')
@@ -554,15 +625,10 @@ def schedule_task(task):
 def initialize_system():
     with app.app_context():
         try:
-            db.create_all()
-            # 迁移逻辑... (简化)
-            with db.engine.connect() as conn:
-                try: conn.execute(text('ALTER TABLE task ADD COLUMN schedule_type VARCHAR(20) DEFAULT "cron"'))
-                except: pass
-                try: conn.execute(text('ALTER TABLE task ADD COLUMN random_delay_max INTEGER DEFAULT 0'))
-                except: pass
-                conn.commit()
+            # 数据库初始化脚本已经处理了创建和迁移，这里主要用于确认 Admin 存在
+            # 并且在应用启动时恢复调度
             
+            # 确保 Admin 存在 (双重保险)
             admin_user = os.environ.get('ADMIN_USERNAME', 'admin')
             if not User.query.filter_by(username=admin_user).first():
                 user = User(username=admin_user)
@@ -570,12 +636,15 @@ def initialize_system():
                 db.session.add(user)
                 db.session.commit()
             
+            # 恢复任务调度
             tasks = Task.query.filter_by(enabled=True).all()
             for task in tasks:
                 schedule_task(task)
+                
         except Exception as e:
             print(f"Init error: {e}")
 
+# 启动初始化
 initialize_system()
 
 if __name__ == '__main__':
