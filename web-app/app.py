@@ -26,10 +26,11 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+# 初始化并启动调度器
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # --- 数据库模型 ---
@@ -46,7 +47,6 @@ class Task(db.Model):
     enabled = db.Column(db.Boolean, default=True)
     last_run = db.Column(db.DateTime)
     last_status = db.Column(db.String(50))
-    # 修改点 1: 使用 datetime.now 确保创建时间符合系统时区
     created_at = db.Column(db.DateTime, default=datetime.now)
 
 @login_manager.user_loader
@@ -190,10 +190,18 @@ def run_task_now(task_id):
     task = db.session.get(Task, task_id)
     if not task:
         return jsonify({'error': 'Task not found'}), 404
-    execute_script(task.id)
+    
+    # 异步执行，不阻塞 API
+    scheduler.add_job(
+        func=execute_script,
+        id=f'manual_run_{task.id}_{int(time.time())}',
+        args=[task.id],
+        max_instances=5,
+        misfire_grace_time=60
+    )
+    
     return jsonify({'success': True, 'message': '任务已开始执行，请在VNC窗口查看执行过程'})
 
-# --- 新增: 切换任务启用状态的接口 ---
 @app.route('/api/tasks/<int:task_id>/toggle', methods=['POST'])
 @login_required
 def toggle_task(task_id):
@@ -201,11 +209,9 @@ def toggle_task(task_id):
     if not task:
         return jsonify({'error': 'Task not found'}), 404
     
-    # 切换状态
     task.enabled = not task.enabled
     db.session.commit()
     
-    # 更新调度器
     try:
         if task.enabled:
             schedule_task(task)
@@ -214,7 +220,6 @@ def toggle_task(task_id):
             scheduler.remove_job(f'task_{task.id}')
             logger.info(f"Task {task.id} disabled and removed from scheduler")
     except Exception as e:
-        # 即使调度器报错（如任务本来就不在调度中），也视为成功切换了数据库状态
         logger.warning(f"Scheduler update warning for task {task.id}: {e}")
         pass
 
@@ -237,18 +242,13 @@ def schedule_task(task):
             logger.error(f'调度任务失败: {e}')
 
 def get_desktop_env():
-    """
-    关键函数：获取 VNC 桌面的环境变量 (DISPLAY, DBUS)。
-    确保后台进程能与前台桌面应用（如 AutoKey, Chrome）通信。
-    """
     env = os.environ.copy()
-    env['DISPLAY'] = ':1' # 强制指定显示编号
+    env['DISPLAY'] = ':1'
     
     dbus_file = Path('/home/headless/.dbus-env')
     if dbus_file.exists():
         try:
             content = dbus_file.read_text().strip()
-            # 解析 export DBUS_SESSION_BUS_ADDRESS='...'
             if content.startswith('export '):
                 parts = content.replace('export ', '').split('=', 1)
                 if len(parts) == 2:
@@ -268,7 +268,6 @@ def execute_script(task_id):
         task = db.session.get(Task, task_id)
         if not task: return False
         
-        # 修改点 2: 使用 datetime.now() 获取当前系统时间(含时区修正)
         task.last_run = datetime.now()
         db.session.commit()
 
@@ -283,7 +282,6 @@ def execute_script(task_id):
             elif script_path.endswith('.ascr'):
                 success = execute_actiona_script(task.name, task.script_path)
             elif script_path.endswith('.autokey'):
-                # AutoKey 使用文件名（不带后缀）作为脚本ID
                 success = execute_autokey_script(Path(task.script_path).stem, task.name)
             else:
                 logger.error(f"不支持的脚本类型: {script_path}")
@@ -299,31 +297,24 @@ def execute_script(task_id):
             db.session.commit()
             return False
 
-# --- 1. 执行 Selenium IDE (.side) ---
 def execute_selenium_script(task_name, script_path):
     from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification, send_email_notification
     bot_token, chat_id = get_telegram_config()
-    
-    # 注入桌面环境
     os.environ.update(get_desktop_env())
     
     try:
         executor = SeleniumIDEExecutor(script_path)
         success, message = executor.execute()
         
-        # 发送 Telegram
         if bot_token and chat_id:
             send_telegram_notification(f"{task_name} (Selenium)", success, message, bot_token, chat_id)
         
-        # 发送邮件
         send_email_notification(f"{task_name} (Selenium)", success, message)
-        
         return success
     except Exception as e:
         logger.error(f"Selenium执行错误: {e}")
         return False
 
-# --- 2. 执行 Playwright/Python (.py) ---
 def execute_python_script(task_name, script_path):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
@@ -347,25 +338,20 @@ def execute_python_script(task_name, script_path):
             
         from scripts.task_executor import send_telegram_notification, send_email_notification
         
-        # 发送 Telegram
         if bot_token and chat_id:
             send_telegram_notification(f"{task_name} (Playwright)", success, log_msg, bot_token, chat_id)
             
-        # 发送邮件
         send_email_notification(f"{task_name} (Playwright)", success, log_msg)
-            
         return success
     except Exception as e:
         logger.error(f"Python执行异常: {e}")
         return False
 
-# --- 3. 执行 Actiona (.ascr) ---
 def execute_actiona_script(task_name, script_path):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
     
     try:
-        # -C: 执行后关闭, -e: 自动执行
         result = subprocess.run(
             ['actiona', '-s', script_path, '-e', '-C'],
             capture_output=True,
@@ -384,25 +370,20 @@ def execute_actiona_script(task_name, script_path):
 
         from scripts.task_executor import send_telegram_notification, send_email_notification
         
-        # 发送 Telegram
         if bot_token and chat_id:
             send_telegram_notification(f"{task_name} (Actiona)", success, log_msg, bot_token, chat_id)
         
-        # 发送邮件
         send_email_notification(f"{task_name} (Actiona)", success, log_msg)
-            
         return success
     except Exception as e:
         logger.error(f"Actiona执行异常: {e}")
         return False
 
-# --- 4. 执行 AutoKey (.autokey) ---
 def execute_autokey_script(script_stem, task_name):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
     
     try:
-        # 这里的 env 必须包含正确的 DBUS_SESSION_BUS_ADDRESS
         result = subprocess.run(
             ['autokey-run', '-s', script_stem],
             capture_output=True,
@@ -410,7 +391,6 @@ def execute_autokey_script(script_stem, task_name):
             timeout=300,
             env=env
         )
-        
         success = result.returncode == 0
         log_msg = (result.stdout + "\n" + result.stderr).strip()
         if not log_msg: log_msg = "命令已发送 (无控制台输出)"
@@ -422,38 +402,62 @@ def execute_autokey_script(script_stem, task_name):
             
         from scripts.task_executor import send_telegram_notification, send_email_notification
         
-        # 发送 Telegram
         if bot_token and chat_id:
             send_telegram_notification(f"{task_name} (AutoKey)", success, log_msg, bot_token, chat_id)
             
-        # 发送邮件
         send_email_notification(f"{task_name} (AutoKey)", success, log_msg)
-
         return success
     except Exception as e:
         logger.error(f"AutoKey执行异常: {e}")
         return False
 
-if __name__ == '__main__':
+# --- 关键修复：系统启动时自动恢复任务 ---
+def initialize_system():
+    """在应用启动时（包括 Gunicorn 模式）自动运行的初始化逻辑"""
     with app.app_context():
-        db.create_all()
-        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        if not User.query.filter_by(username=admin_username).first():
-            user = User(username=admin_username, password=admin_password)
-            db.session.add(user)
-            db.session.commit()
-            print(f'已创建默认管理员账号: {admin_username}')
-        tasks = Task.query.filter_by(enabled=True).all()
-        for task in tasks:
-            try:
-                schedule_task(task)
-                print(f'已加载任务: {task.name}')
-            except Exception as e:
-                print(f'加载任务失败 {task.name}: {e}')
+        try:
+            # 1. 确保数据库表存在 (防止首次启动时表不存在报错)
+            db.create_all()
+            
+            # 2. 确保默认管理员账户存在
+            admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+            admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+            
+            # 检查用户是否存在，不存在则创建
+            if not User.query.filter_by(username=admin_username).first():
+                user = User(username=admin_username, password=admin_password)
+                db.session.add(user)
+                db.session.commit()
+                print(f'✅ [Init] Default admin user created: {admin_username}')
+            
+            # 3. 核心：从数据库加载并恢复所有启用的定时任务
+            # 这是修复重启后任务丢失的关键步骤
+            tasks = Task.query.filter_by(enabled=True).all()
+            loaded_count = 0
+            for task in tasks:
+                try:
+                    # 重新将任务注册到内存中的调度器
+                    schedule_task(task)
+                    loaded_count += 1
+                except Exception as e:
+                    print(f'❌ [Init] Failed to reload task {task.name}: {e}')
+            
+            if loaded_count > 0:
+                print(f'✅ [Init] Successfully restored {loaded_count} scheduled tasks from database.')
+            else:
+                print('ℹ️ [Init] No active tasks found in database to restore.')
+                
+        except Exception as e:
+            # 即使初始化出错，也不要阻断应用启动，但需打印错误
+            print(f'⚠️ [Init] System initialization warning: {e}')
+
+# 直接调用初始化函数，确保 Gunicorn 加载 app 时也会执行
+initialize_system()
+
+if __name__ == '__main__':
+    # 开发模式运行
     print('='*50)
     print('自动化全能管理平台已启动')
     print(f'Web 界面: http://0.0.0.0:5000')
-    print(f'支持脚本: .side (Selenium), .py (Playwright), .ascr (Actiona), .autokey')
     print('='*50)
     app.run(host='0.0.0.0', port=5000, debug=False)
