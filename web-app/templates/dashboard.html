@@ -5,6 +5,41 @@
     <title>自动化管理平台</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* 简单的内联样式补充，用于新的表单元素 */
+        .radio-group {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 15px;
+        }
+        .radio-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            color: #d1d1d6;
+        }
+        .time-range-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .time-range-group input {
+            flex: 1;
+        }
+        .hidden {
+            display: none;
+        }
+        .tag-random {
+            background: rgba(255, 137, 6, 0.2);
+            color: #ff8906;
+            border: 1px solid rgba(255, 137, 6, 0.3);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            margin-right: 6px;
+        }
+    </style>
 </head>
 <body>
 <nav>
@@ -40,8 +75,21 @@
             
             <div class="task-info">
                 <p><strong>脚本</strong> {{ task.script_path }}</p>
-                <p><strong>周期</strong> {{ task.cron_expression }}</p>
-                <p><strong>状态</strong> {{ task.last_run.strftime('%m-%d %H:%M') if task.last_run else '等待调度' }}</p>
+                <p><strong>调度</strong> 
+                    {% if task.schedule_type == 'random' %}
+                        <span class="tag-random">🎲 随机</span> 每天 {{ task.random_start }} - {{ task.random_end }}
+                    {% else %}
+                        {{ task.cron_expression }}
+                    {% endif %}
+                </p>
+                <p><strong>状态</strong> 
+                    <span style="color: {% if task.last_status == 'Success' %}#2cb67d{% elif task.last_status == 'Failed' or task.last_status == 'Error' %}#ef4565{% else %}#94a1b2{% endif %}">
+                        {{ task.last_status if task.last_status else '等待调度' }}
+                    </span>
+                    <span style="font-size: 0.8em; margin-left: 8px; opacity: 0.7;">
+                        {{ task.last_run.strftime('%m-%d %H:%M') if task.last_run else '' }}
+                    </span>
+                </p>
             </div>
 
             <div class="task-actions">
@@ -87,6 +135,20 @@
             </div>
             
             <div class="form-group">
+                <label>调度模式</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="scheduleType" value="cron" checked onchange="toggleScheduleInputs()">
+                        常规 Cron
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="scheduleType" value="random" onchange="toggleScheduleInputs()">
+                        🎲 随机时间段 (模拟真人)
+                    </label>
+                </div>
+            </div>
+
+            <div id="cronInputGroup" class="form-group">
                 <label>Cron 调度表达式</label>
                 <div class="cron-presets">
                     <button type="button" class="preset-btn" onclick="setCron('*/5 * * * *')">每5分</button>
@@ -94,9 +156,21 @@
                     <button type="button" class="preset-btn" onclick="setCron('0 9 * * *')">每天9点</button>
                     <button type="button" class="preset-btn" onclick="setCron('0 9,18 * * *')">早晚</button>
                 </div>
-                <input type="text" id="cronExpression" required placeholder="例如: 0 9 * * *" />
+                <input type="text" id="cronExpression" placeholder="例如: 0 9 * * *" />
                 <small class="help-text" id="cronHelp">
                     预览: 请输入表达式以查看说明
+                </small>
+            </div>
+
+            <div id="randomInputGroup" class="form-group hidden">
+                <label>每天执行时间范围</label>
+                <div class="time-range-group">
+                    <input type="time" id="randomStart" />
+                    <span>至</span>
+                    <input type="time" id="randomEnd" />
+                </div>
+                <small class="help-text">
+                    任务将在每天的开始时间触发，并随机推迟执行，确保在结束时间前完成。
                 </small>
             </div>
             
@@ -108,6 +182,124 @@
     </div>
 </div>
 
+<script>
+    // 在这里内联部分JS逻辑以处理新的UI切换，原 script.js 逻辑主要处理 API 调用
+    
+    function toggleScheduleInputs() {
+        const type = document.querySelector('input[name="scheduleType"]:checked').value;
+        const cronGroup = document.getElementById('cronInputGroup');
+        const randomGroup = document.getElementById('randomInputGroup');
+        const cronInput = document.getElementById('cronExpression');
+        const startInput = document.getElementById('randomStart');
+        const endInput = document.getElementById('randomEnd');
+
+        if (type === 'random') {
+            cronGroup.classList.add('hidden');
+            randomGroup.classList.remove('hidden');
+            cronInput.required = false;
+            startInput.required = true;
+            endInput.required = true;
+        } else {
+            cronGroup.classList.remove('hidden');
+            randomGroup.classList.add('hidden');
+            cronInput.required = true;
+            startInput.required = false;
+            endInput.required = false;
+        }
+    }
+
+    // 覆盖 script.js 中的部分函数以适配新字段
+    // 注意：实际项目中建议修改 script.js，这里为了完整性演示覆盖逻辑
+    
+    // --- 重写 openAddModal ---
+    const originalOpenAddModal = window.openAddModal;
+    window.openAddModal = function() {
+        if (originalOpenAddModal) originalOpenAddModal();
+        // 重置为 Cron 默认
+        document.querySelector('input[name="scheduleType"][value="cron"]').checked = true;
+        toggleScheduleInputs();
+    }
+
+    // --- 重写 editTask ---
+    window.editTask = function(taskId) {
+        currentTaskId = taskId;
+        document.getElementById('modalTitle').textContent = '编辑任务';
+
+        fetch(`/api/tasks/${taskId}`)
+            .then(response => response.json())
+            .then(task => {
+                document.getElementById('taskId').value = task.id;
+                document.getElementById('taskName').value = task.name;
+                document.getElementById('scriptPath').value = task.script_path;
+                
+                // 设置调度模式
+                const scheduleType = task.schedule_type || 'cron';
+                document.querySelector(`input[name="scheduleType"][value="${scheduleType}"]`).checked = true;
+                toggleScheduleInputs();
+
+                if (scheduleType === 'random') {
+                    document.getElementById('randomStart').value = task.random_start || '';
+                    document.getElementById('randomEnd').value = task.random_end || '';
+                    // 填充一个默认cron以防验证失败，虽然提交时会处理
+                    document.getElementById('cronExpression').value = task.cron_expression || ''; 
+                } else {
+                    document.getElementById('cronExpression').value = task.cron_expression;
+                }
+
+                document.getElementById('taskModal').style.display = 'block';
+            })
+            .catch(error => {
+                alert('获取任务详情失败: ' + error);
+            });
+    }
+
+    // --- 重写 saveTask ---
+    window.saveTask = function(event) {
+        event.preventDefault();
+
+        const taskId = document.getElementById('taskId').value;
+        const scheduleType = document.querySelector('input[name="scheduleType"]:checked').value;
+        
+        const data = {
+            name: document.getElementById('taskName').value,
+            script_path: document.getElementById('scriptPath').value,
+            enabled: true,
+            schedule_type: scheduleType
+        };
+
+        if (scheduleType === 'random') {
+            data.random_start = document.getElementById('randomStart').value;
+            data.random_end = document.getElementById('randomEnd').value;
+            // 随机模式下，cron_expression 后端会自动生成，但为了不传空值
+            data.cron_expression = ""; 
+        } else {
+            data.cron_expression = document.getElementById('cronExpression').value;
+        }
+
+        const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
+        const method = taskId ? 'PUT' : 'POST';
+
+        fetch(url, {
+            method: method,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        })
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    closeModal();
+                    location.reload();
+                } else {
+                    alert('保存失败: ' + (result.error || '未知错误'));
+                }
+            })
+            .catch(error => {
+                alert('保存失败: ' + error);
+            });
+    }
+</script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
