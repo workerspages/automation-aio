@@ -5,30 +5,20 @@
     <title>自动化管理平台</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- CodeMirror 核心样式与依赖 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/dracula.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/python/python.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/javascript/javascript.min.js"></script>
+
     <style>
-        .radio-group {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 15px;
-        }
-        .radio-label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            color: #d1d1d6;
-        }
-        .time-range-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .time-range-group input {
-            flex: 1;
-        }
-        .hidden {
-            display: none;
-        }
+        .radio-group { display: flex; gap: 20px; margin-bottom: 15px; }
+        .radio-label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #d1d1d6; }
+        .time-range-group { display: flex; align-items: center; gap: 10px; }
+        .time-range-group input { flex: 1; }
+        .hidden { display: none; }
         .tag-random {
             background: rgba(255, 137, 6, 0.2);
             color: #ff8906;
@@ -37,6 +27,54 @@
             border-radius: 4px;
             font-size: 0.8em;
             margin-right: 6px;
+        }
+
+        /* 文件管理器样式 */
+        .file-list {
+            margin-top: 15px;
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            background: rgba(0,0,0,0.2);
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--glass-border);
+            transition: background 0.2s;
+        }
+        .file-item:last-child { border-bottom: none; }
+        .file-item:hover { background: rgba(255,255,255,0.05); }
+        .file-info { display: flex; flex-direction: column; gap: 4px; }
+        .file-name { color: var(--text-main); font-weight: 500; }
+        .file-meta { font-size: 0.8em; color: var(--text-muted); }
+        .file-actions { display: flex; gap: 8px; }
+        
+        /* CodeMirror 自定义调整 */
+        .CodeMirror {
+            height: 60vh;
+            border-radius: 8px;
+            font-family: 'Fira Code', 'Consolas', monospace;
+            font-size: 14px;
+        }
+        
+        /* Tab 切换样式 */
+        .folder-tabs { display: flex; gap: 10px; margin-bottom: 15px; }
+        .folder-tab {
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-muted);
+            border: 1px solid transparent;
+        }
+        .folder-tab.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
         }
     </style>
 </head>
@@ -48,6 +86,7 @@
             <h1>Automation AIO</h1>
         </div>
         <div class="nav-links">
+            <button class="logout-btn" onclick="openFileManager()">📂 脚本管理</button>
             <a href="/vnc/vnc.html?path=vnc/websockify" target="_blank" class="logout-btn">🖥️ 远程桌面</a>
             <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>
         </div>
@@ -108,11 +147,12 @@
     </div>
 </div>
 
+<!-- 任务配置 Modal -->
 <div id="taskModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
             <h2 id="modalTitle">添加任务</h2>
-            <span class="close" onclick="closeModal()">&times;</span>
+            <span class="close" onclick="closeModal('taskModal')">&times;</span>
         </div>
         
         <form id="taskForm" onsubmit="saveTask(event)">
@@ -126,7 +166,7 @@
             <div class="form-group">
                 <label>选择脚本文件</label>
                 <select id="scriptPath" required>
-                    <option value="">-- 请选择 /Downloads 目录下的脚本 --</option>
+                    <option value="">-- 请选择脚本 --</option>
                     {% for script in scripts %}
                     <option value="{{ script.path }}">{{ script.name }}</option>
                     {% endfor %}
@@ -174,10 +214,60 @@
             </div>
             
             <div class="form-actions">
-                <button type="button" class="btn-secondary" onclick="closeModal()">取消</button>
+                <button type="button" class="btn-secondary" onclick="closeModal('taskModal')">取消</button>
                 <button type="submit" class="btn-primary">保存配置</button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- 脚本管理器 Modal -->
+<div id="fileManagerModal" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+        <div class="modal-header">
+            <h2>脚本文件管理</h2>
+            <span class="close" onclick="closeModal('fileManagerModal')">&times;</span>
+        </div>
+        
+        <div class="folder-tabs">
+            <div class="folder-tab active" id="tab-downloads" onclick="switchFolder('downloads')">Downloads (Selenium/常规)</div>
+            <div class="folder-tab" id="tab-autokey" onclick="switchFolder('autokey')">AutoKey (系统级脚本)</div>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="color: var(--text-muted); font-size: 0.9em;" id="current-path-hint">正在查看: /home/headless/Downloads</span>
+            <button class="btn-primary" onclick="createNewScript()" style="padding: 6px 16px; font-size: 0.9rem;">+ 新建脚本</button>
+        </div>
+
+        <div class="file-list" id="fileListContainer">
+            <!-- 动态生成列表 -->
+            <div style="padding: 20px; text-align: center; color: #666;">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<!-- 代码编辑器 Modal -->
+<div id="editorModal" class="modal">
+    <div class="modal-content" style="max-width: 90vw; width: 1000px;">
+        <div class="modal-header">
+            <h2 id="editorTitle">编辑代码</h2>
+            <span class="close" onclick="closeModal('editorModal')">&times;</span>
+        </div>
+        
+        <input type="hidden" id="editorFolder" />
+        <input type="hidden" id="editorFilename" />
+        <div class="form-group">
+            <input type="text" id="editorFilenameDisplay" placeholder="文件名 (例如: script.py)" style="margin-bottom: 10px;" />
+        </div>
+
+        <div style="border: 1px solid #444; border-radius: 8px; overflow: hidden;">
+            <textarea id="codeEditor"></textarea>
+        </div>
+        
+        <div class="form-actions" style="margin-top: 15px;">
+            <button type="button" class="btn-secondary" onclick="closeModal('editorModal')">放弃更改</button>
+            <button type="button" class="btn-primary" onclick="saveScriptContent()">保存代码</button>
+        </div>
     </div>
 </div>
 
