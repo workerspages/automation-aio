@@ -7,7 +7,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  IMAGE_NAME: ubuntu-automation
+  IMAGE_NAME: automation-aio
 
 jobs:
   build:
