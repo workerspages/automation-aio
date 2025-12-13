@@ -79,7 +79,7 @@ def send_email_notification(script_name, success, message):
     
     # 邮件正文内容
     body = f"""
-    <h3>自动化任务执行报告</h3>
+    <h3>🤖 Automation AIO 任务执行报告</h3>
     <p><b>任务名称:</b> {script_name}</p>
     <p><b>执行状态:</b> <span style="color: {'green' if success else 'red'}">{status_text}</span></p>
     <p><b>执行时间:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
