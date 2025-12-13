@@ -433,6 +433,9 @@ def run_task_with_context(app_instance, task_id):
         traceback.print_exc()
 
 def execute_script_core(task_id):
+    """
+    核心执行逻辑，需在 App Context 内调用
+    """
     task = db.session.get(Task, task_id)
     if not task:
         print(f"❌ execute_script_core: Task {task_id} not found in DB")
@@ -440,10 +443,12 @@ def execute_script_core(task_id):
     
     print(f"🚀 Executing task: {task.name} ({task.script_path})")
     
+    # 更新运行时间，解决时区警告
     task.last_run = datetime.now(SYSTEM_TZ).replace(tzinfo=None)
     db.session.commit()
 
     script_path = task.script_path
+    
     # 路径清理
     if script_path.startswith("[downloads] "): script_path = script_path.replace("[downloads] ", "", 1)
     if script_path.startswith("[autokey] "): script_path = script_path.replace("[autokey] ", "", 1)
@@ -451,24 +456,25 @@ def execute_script_core(task_id):
     success = False
     
     try:
-        if script_path.lower().endswith('.side'):
-            success = execute_selenium_script(task.name, script_path)
+        # === 核心逻辑修改：优先识别并执行 AutoKey 脚本 ===
+        # 1. 如果路径包含 'autokey/data' 或 'MyScripts'，绝对是 AutoKey 脚本
+        if 'autokey/data' in script_path or 'MyScripts' in script_path:
+             stem = Path(script_path).stem
+             print(f"🔄 Detected AutoKey script by path: {stem}")
+             success = execute_autokey_script(stem, task.name)
+             
+        # 2. 如果文件后缀是 .py 但不在 autokey 目录下，才是普通 Python 脚本
         elif script_path.lower().endswith('.py'):
+            print(f"🐍 Running as standard Python script: {script_path}")
             success = execute_python_script(task.name, script_path)
+            
+        elif script_path.lower().endswith('.side'):
+            success = execute_selenium_script(task.name, script_path)
         elif script_path.lower().endswith('.ascr'):
             success = execute_actiona_script(task.name, script_path)
-        elif 'autokey' in script_path.lower():
-            # AutoKey 只需要文件名 stem
-            stem = Path(script_path).stem
-            success = execute_autokey_script(stem, task.name)
         else:
-            # 可能是 autokey 的常规脚本路径，尝试作为 autokey 执行
-            if 'MyScripts' in script_path:
-                 stem = Path(script_path).stem
-                 success = execute_autokey_script(stem, task.name)
-            else:
-                logger.error(f"Unsupported script type: {script_path}")
-                success = False
+            logger.error(f"Unsupported script type: {script_path}")
+            success = False
         
         task.last_status = 'Success' if success else 'Failed'
         db.session.commit()
