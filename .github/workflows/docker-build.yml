@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ new-ui-20251212 ]
+    branches: [ new-ui-file-editor ]
     tags: [ "v*" ]
   workflow_dispatch: {}
 
