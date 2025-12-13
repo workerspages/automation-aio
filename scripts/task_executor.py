@@ -75,7 +75,7 @@ def send_email_notification(script_name, success, message):
         return
 
     status_text = '✅ 执行成功' if success else '❌ 执行失败'
-    subject = f"[{status_text}] 自动化任务通知: {script_name}"
+    subject = f"[{status_text}] Automation AIO 任务执行通知: {script_name}"
     
     # 邮件正文内容
     body = f"""
