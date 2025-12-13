@@ -1,10 +1,45 @@
 let currentTaskId = null;
 
+// 切换调度模式输入的显示/隐藏
+function toggleScheduleInputs() {
+    // 检查是否存在相关元素，防止报错
+    const cronGroup = document.getElementById('cronInputGroup');
+    if (!cronGroup) return;
+
+    const typeRadio = document.querySelector('input[name="scheduleType"]:checked');
+    const type = typeRadio ? typeRadio.value : 'cron';
+    
+    const randomGroup = document.getElementById('randomInputGroup');
+    const cronInput = document.getElementById('cronExpression');
+    const startInput = document.getElementById('randomStart');
+    const endInput = document.getElementById('randomEnd');
+
+    if (type === 'random') {
+        cronGroup.classList.add('hidden');
+        randomGroup.classList.remove('hidden');
+        if (cronInput) cronInput.required = false;
+        if (startInput) startInput.required = true;
+        if (endInput) endInput.required = true;
+    } else {
+        cronGroup.classList.remove('hidden');
+        randomGroup.classList.add('hidden');
+        if (cronInput) cronInput.required = true;
+        if (startInput) startInput.required = false;
+        if (endInput) endInput.required = false;
+    }
+}
+
 function openAddModal() {
     currentTaskId = null;
     document.getElementById('modalTitle').textContent = '添加任务';
     document.getElementById('taskForm').reset();
     document.getElementById('taskId').value = '';
+    
+    // 重置为 Cron 默认模式
+    const cronRadio = document.querySelector('input[name="scheduleType"][value="cron"]');
+    if (cronRadio) cronRadio.checked = true;
+    toggleScheduleInputs();
+
     document.getElementById('taskModal').style.display = 'block';
 }
 
@@ -18,11 +53,39 @@ function editTask(taskId) {
             document.getElementById('taskId').value = task.id;
             document.getElementById('taskName').value = task.name;
             document.getElementById('scriptPath').value = task.script_path;
-            document.getElementById('cronExpression').value = task.cron_expression;
+            
+            // --- 核心修复逻辑开始 ---
+            // 1. 获取调度类型，默认为 'cron'
+            const scheduleType = task.schedule_type || 'cron';
+            
+            // 2. 设置单选按钮状态
+            const radio = document.querySelector(`input[name="scheduleType"][value="${scheduleType}"]`);
+            if (radio) {
+                radio.checked = true;
+            }
+
+            // 3. 填充数据
+            if (scheduleType === 'random') {
+                document.getElementById('randomStart').value = task.random_start || '';
+                document.getElementById('randomEnd').value = task.random_end || '';
+                // 填充 cron 表达式以防显示为空（虽然被隐藏）
+                document.getElementById('cronExpression').value = task.cron_expression || '';
+            } else {
+                document.getElementById('cronExpression').value = task.cron_expression || '';
+                // 清空随机时间输入
+                document.getElementById('randomStart').value = '';
+                document.getElementById('randomEnd').value = '';
+            }
+
+            // 4. 根据类型切换UI显示
+            toggleScheduleInputs();
+            // --- 核心修复逻辑结束 ---
+
             document.getElementById('taskModal').style.display = 'block';
         })
         .catch(error => {
             alert('获取任务详情失败: ' + error);
+            console.error(error);
         });
 }
 
@@ -30,12 +93,24 @@ function saveTask(event) {
     event.preventDefault();
 
     const taskId = document.getElementById('taskId').value;
+    const scheduleTypeRadio = document.querySelector('input[name="scheduleType"]:checked');
+    const scheduleType = scheduleTypeRadio ? scheduleTypeRadio.value : 'cron';
+    
     const data = {
         name: document.getElementById('taskName').value,
         script_path: document.getElementById('scriptPath').value,
-        cron_expression: document.getElementById('cronExpression').value,
-        enabled: true
+        enabled: true,
+        schedule_type: scheduleType
     };
+
+    if (scheduleType === 'random') {
+        data.random_start = document.getElementById('randomStart').value;
+        data.random_end = document.getElementById('randomEnd').value;
+        // 随机模式下，cron_expression 后端会自动生成，传空字符串即可
+        data.cron_expression = ""; 
+    } else {
+        data.cron_expression = document.getElementById('cronExpression').value;
+    }
 
     const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
     const method = taskId ? 'PUT' : 'POST';
@@ -103,7 +178,6 @@ function deleteTask(taskId) {
         });
 }
 
-// 新增: 切换任务状态
 function toggleTask(taskId) {
     fetch(`/api/tasks/${taskId}/toggle`, {
         method: 'POST'
@@ -122,12 +196,17 @@ function toggleTask(taskId) {
 }
 
 function setCron(expression) {
-    document.getElementById('cronExpression').value = expression;
-    updateCronHelp(expression);
+    const input = document.getElementById('cronExpression');
+    if (input) {
+        input.value = expression;
+        updateCronHelp(expression);
+    }
 }
 
 function updateCronHelp(expression) {
     const helpText = document.getElementById('cronHelp');
+    if (!helpText) return;
+
     const descriptions = {
         '*/5 * * * *': '每5分钟执行一次',
         '0 * * * *': '每小时整点执行',
@@ -159,4 +238,6 @@ document.addEventListener('DOMContentLoaded', function() {
             updateCronHelp(this.value);
         });
     }
+    // 初始化时确保UI状态正确（针对某些浏览器缓存了表单状态的情况）
+    toggleScheduleInputs();
 });
