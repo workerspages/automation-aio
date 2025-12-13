@@ -24,9 +24,21 @@ chown headless:headless /home/headless/.vnc/passwd
 
 echo "VNC密码文件已生成"
 
-# 3. 权限修正
+# 3. 权限修正 (通用)
+echo "修正通用目录权限..."
 mkdir -p /app/data /app/logs /home/headless/Downloads
 chown -R headless:headless /app /home/headless /opt/venv
+
+# ===================================================================
+# 3.5 [修复] 强制修正 AutoKey 目录权限 (解决 Errno 13 错误)
+# ===================================================================
+echo "修正 AutoKey 配置权限..."
+# 预先创建 AutoKey 需要的目录结构
+mkdir -p "/home/headless/.config/autokey/data/My Phrases"
+mkdir -p "/home/headless/.config/autokey/data/MyScripts"
+# 确保整个 .config 目录属于 headless 用户
+chown -R headless:headless /home/headless/.config
+# ===================================================================
 
 # 4. 初始化数据库
 echo "初始化数据库..."
@@ -58,22 +70,15 @@ except Exception as e:
 PYEOF
 }
 
-# ===================================================================
-# 5. 配置 Cloudflare Tunnel (核心修复部分)
-# ===================================================================
-# 将环境变量转为小写，兼容 True/true/TRUE
+# 5. 配置 Cloudflare Tunnel
 CF_ENABLE=$(echo "${ENABLE_CLOUDFLARE_TUNNEL}" | tr '[:upper:]' '[:lower:]')
 
 if [ "$CF_ENABLE" == "true" ]; then
     echo "🌐 [Cloudflare] 检测到启用开关..."
-    
     if [ -z "${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
         echo "❌ [Cloudflare] 错误: 启用了开关但未提供 Token！"
     else
         echo "✅ [Cloudflare] 正在写入 Supervisor 配置..."
-        
-        # 动态追加配置到 supervisord 配置文件
-        # 使用 cat << EOF 确保变量被正确解析并写入文件
         cat << EOF >> /etc/supervisor/conf.d/services.conf
 
 [program:cloudflared]
@@ -98,7 +103,6 @@ echo "==================================="
 echo "启动服务..."
 echo "==================================="
 
-# 打印配置文件末尾以供调试验证，确认 Cloudflare 块已写入
 tail -n 15 /etc/supervisor/conf.d/services.conf
 
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/services.conf
