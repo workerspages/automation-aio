@@ -2,12 +2,7 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    # 修改镜像名称(根据您的构建设置)
     image: ghcr.io/workerspages/ubuntu-automation:aio
-    # 或使用本地构建
-    # build:
-    #   context: .
-    #   dockerfile: Dockerfile
     container_name: ubuntu-automation
     ports:
       - "5000:5000"
