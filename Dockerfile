@@ -242,7 +242,7 @@ RUN mkdir -p /home/headless/.config/google-chrome && \
     chown -R headless:headless /home/headless/.config /home/headless/.mozilla
 
 # ===================================================================
-# VNC xstartup脚本 (含防休眠命令)
+# VNC xstartup脚本 (含防休眠命令及中文输入法变量)
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
     chown headless:headless /home/headless/.vnc
