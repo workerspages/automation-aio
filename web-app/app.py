@@ -425,7 +425,8 @@ def execute_script_core(task_id):
     print(f"🚀 Executing task: {task.name} ({task.script_path})")
     
     # 更新运行时间
-    task.last_run = datetime.now()
+    # 核心优化：使用系统时区获取时间，但转为 naive 存储以兼容 SQLite
+    task.last_run = datetime.now(SYSTEM_TZ).replace(tzinfo=None)
     db.session.commit()
 
     script_path = task.script_path
