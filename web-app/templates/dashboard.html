@@ -6,7 +6,6 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* 简单的内联样式补充，用于新的表单元素 */
         .radio-group {
             display: flex;
             gap: 20px;
@@ -182,124 +181,6 @@
     </div>
 </div>
 
-<script>
-    // 在这里内联部分JS逻辑以处理新的UI切换，原 script.js 逻辑主要处理 API 调用
-    
-    function toggleScheduleInputs() {
-        const type = document.querySelector('input[name="scheduleType"]:checked').value;
-        const cronGroup = document.getElementById('cronInputGroup');
-        const randomGroup = document.getElementById('randomInputGroup');
-        const cronInput = document.getElementById('cronExpression');
-        const startInput = document.getElementById('randomStart');
-        const endInput = document.getElementById('randomEnd');
-
-        if (type === 'random') {
-            cronGroup.classList.add('hidden');
-            randomGroup.classList.remove('hidden');
-            cronInput.required = false;
-            startInput.required = true;
-            endInput.required = true;
-        } else {
-            cronGroup.classList.remove('hidden');
-            randomGroup.classList.add('hidden');
-            cronInput.required = true;
-            startInput.required = false;
-            endInput.required = false;
-        }
-    }
-
-    // 覆盖 script.js 中的部分函数以适配新字段
-    // 注意：实际项目中建议修改 script.js，这里为了完整性演示覆盖逻辑
-    
-    // --- 重写 openAddModal ---
-    const originalOpenAddModal = window.openAddModal;
-    window.openAddModal = function() {
-        if (originalOpenAddModal) originalOpenAddModal();
-        // 重置为 Cron 默认
-        document.querySelector('input[name="scheduleType"][value="cron"]').checked = true;
-        toggleScheduleInputs();
-    }
-
-    // --- 重写 editTask ---
-    window.editTask = function(taskId) {
-        currentTaskId = taskId;
-        document.getElementById('modalTitle').textContent = '编辑任务';
-
-        fetch(`/api/tasks/${taskId}`)
-            .then(response => response.json())
-            .then(task => {
-                document.getElementById('taskId').value = task.id;
-                document.getElementById('taskName').value = task.name;
-                document.getElementById('scriptPath').value = task.script_path;
-                
-                // 设置调度模式
-                const scheduleType = task.schedule_type || 'cron';
-                document.querySelector(`input[name="scheduleType"][value="${scheduleType}"]`).checked = true;
-                toggleScheduleInputs();
-
-                if (scheduleType === 'random') {
-                    document.getElementById('randomStart').value = task.random_start || '';
-                    document.getElementById('randomEnd').value = task.random_end || '';
-                    // 填充一个默认cron以防验证失败，虽然提交时会处理
-                    document.getElementById('cronExpression').value = task.cron_expression || ''; 
-                } else {
-                    document.getElementById('cronExpression').value = task.cron_expression;
-                }
-
-                document.getElementById('taskModal').style.display = 'block';
-            })
-            .catch(error => {
-                alert('获取任务详情失败: ' + error);
-            });
-    }
-
-    // --- 重写 saveTask ---
-    window.saveTask = function(event) {
-        event.preventDefault();
-
-        const taskId = document.getElementById('taskId').value;
-        const scheduleType = document.querySelector('input[name="scheduleType"]:checked').value;
-        
-        const data = {
-            name: document.getElementById('taskName').value,
-            script_path: document.getElementById('scriptPath').value,
-            enabled: true,
-            schedule_type: scheduleType
-        };
-
-        if (scheduleType === 'random') {
-            data.random_start = document.getElementById('randomStart').value;
-            data.random_end = document.getElementById('randomEnd').value;
-            // 随机模式下，cron_expression 后端会自动生成，但为了不传空值
-            data.cron_expression = ""; 
-        } else {
-            data.cron_expression = document.getElementById('cronExpression').value;
-        }
-
-        const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
-        const method = taskId ? 'PUT' : 'POST';
-
-        fetch(url, {
-            method: method,
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        })
-            .then(response => response.json())
-            .then(result => {
-                if (result.success) {
-                    closeModal();
-                    location.reload();
-                } else {
-                    alert('保存失败: ' + (result.error || '未知错误'));
-                }
-            })
-            .catch(error => {
-                alert('保存失败: ' + error);
-            });
-    }
-</script>
 <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
