@@ -34,11 +34,9 @@ login_manager.init_app(app)
 login_manager.login_view = 'login'
 
 # --- 调度器配置 ---
-# 1. 强制时区
 SYSTEM_TZ_STR = os.environ.get('TZ', 'Asia/Shanghai')
 SYSTEM_TZ = pytz.timezone(SYSTEM_TZ_STR)
 
-# 2. 配置调度器，增加 misfire_grace_time 全局默认值 (1小时)
 job_defaults = {
     'misfire_grace_time': 3600,
     'coalesce': True,
@@ -53,12 +51,13 @@ task_executor_pool = ThreadPoolExecutor(max_workers=5)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- 目录配置 ---
+# --- 目录配置 (AutoKey 路径直接指向数据目录) ---
 BASE_DIRS = {
     'downloads': Path(os.environ.get('SCRIPTS_DIR', '/home/headless/Downloads')),
     'autokey': Path('/home/headless/.config/autokey/data/MyScripts')
 }
 
+# 确保目录存在
 for p in BASE_DIRS.values():
     try:
         p.mkdir(parents=True, exist_ok=True)
@@ -81,17 +80,16 @@ class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     script_path = db.Column(db.String(500), nullable=False)
-    cron_expression = db.Column(db.String(100), nullable=True) # 允许为空，如果是随机模式
+    cron_expression = db.Column(db.String(100), nullable=True) 
     enabled = db.Column(db.Boolean, default=True)
     last_run = db.Column(db.DateTime)
     last_status = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.now)
     
-    # === 新增字段 ===
-    schedule_type = db.Column(db.String(20), default='cron') # 'cron' or 'random'
-    random_start = db.Column(db.String(10), nullable=True)   # 'HH:MM'
-    random_end = db.Column(db.String(10), nullable=True)     # 'HH:MM'
-    random_delay_max = db.Column(db.Integer, default=0)      # 保留字段，暂不使用
+    schedule_type = db.Column(db.String(20), default='cron') 
+    random_start = db.Column(db.String(10), nullable=True)   
+    random_end = db.Column(db.String(10), nullable=True)     
+    random_delay_max = db.Column(db.Integer, default=0)      
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -147,20 +145,31 @@ def list_files_api():
     folder = request.args.get('folder', 'downloads')
     target_dir = get_target_dir(folder)
     files = []
-    if target_dir.exists():
+    
+    # 确保目录存在
+    if not target_dir.exists():
         try:
-            paths = sorted(target_dir.iterdir(), key=os.path.getmtime, reverse=True)
-            for p in paths:
-                # 过滤 AutoKey 的 .json 文件，只显示脚本
-                if p.is_file() and p.name != '.DS_Store' and not p.name.endswith('.json'):
-                    files.append({
-                        'name': p.name,
-                        'size': p.stat().st_size,
-                        'modified': datetime.fromtimestamp(p.stat().st_mtime).strftime('%Y-%m-%d %H:%M'),
-                        'path': str(p)
-                    })
-        except Exception as e:
-            logger.error(f"List files error: {e}")
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except:
+            return jsonify({'files': [], 'error': 'Directory not found'}), 404
+
+    try:
+        # 遍历文件，包含子目录（如果需要的话，目前保持扁平化更好管理）
+        # 这里只列出顶层文件，保持简单
+        paths = sorted(target_dir.iterdir(), key=os.path.getmtime, reverse=True)
+        for p in paths:
+            # 过滤 AutoKey 的 .json 文件，只显示脚本
+            if p.is_file() and p.name != '.DS_Store' and not p.name.endswith('.json'):
+                files.append({
+                    'name': p.name,
+                    'size': p.stat().st_size,
+                    'modified': datetime.fromtimestamp(p.stat().st_mtime).strftime('%Y-%m-%d %H:%M'),
+                    'path': str(p)
+                })
+    except Exception as e:
+        logger.error(f"List files error: {e}")
+        return jsonify({'error': str(e)}), 500
+        
     return jsonify({'files': files, 'current_folder': folder})
 
 @app.route('/api/files/content', methods=['GET'])
@@ -169,14 +178,17 @@ def get_file_content():
     folder = request.args.get('folder', 'downloads')
     filename = request.args.get('filename')
     if not filename: return jsonify({'error': 'Filename required'}), 400
+    
+    # 安全文件名
     filename = secure_filename(filename)
     target_dir = get_target_dir(folder)
     file_path = target_dir / filename
+    
     if file_path.exists():
         try:
             return jsonify({'content': file_path.read_text(encoding='utf-8')})
         except Exception as e:
-            return jsonify({'error': '无法读取文件内容'}), 400
+            return jsonify({'error': '无法读取文件内容: ' + str(e)}), 400
     return jsonify({'error': '文件不存在'}), 404
 
 @app.route('/api/files', methods=['POST'])
@@ -190,6 +202,7 @@ def save_file():
     if not filename: return jsonify({'error': '文件名不能为空'}), 400
     
     target_dir = get_target_dir(folder)
+    # 再次确保目录存在
     target_dir.mkdir(parents=True, exist_ok=True)
     
     file_path = target_dir / filename
@@ -217,11 +230,15 @@ def save_file():
                 json_path.write_text(json.dumps(script_config, indent=4), encoding='utf-8')
                 logger.info(f"AutoKey JSON generated: {json_path}")
                 
-                # 尝试触发布局刷新 (touch top-level folder)
-                os.utime(str(BASE_DIRS['autokey']), None)
+                # 尝试触发布局刷新
+                try:
+                    os.utime(str(BASE_DIRS['autokey']), None)
+                except:
+                    pass
 
         return jsonify({'success': True})
     except Exception as e:
+        logger.error(f"Save file error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/files', methods=['DELETE'])
@@ -230,9 +247,11 @@ def delete_file():
     folder = request.args.get('folder', 'downloads')
     filename = request.args.get('filename')
     if not filename: return jsonify({'error': 'Filename required'}), 400
+    
     filename = secure_filename(filename)
     target_dir = get_target_dir(folder)
     file_path = target_dir / filename
+    
     if file_path.exists():
         try:
             os.remove(file_path)
@@ -256,13 +275,24 @@ def list_scripts():
 def get_available_scripts():
     scripts = []
     supported_extensions = ['.side', '.py', '.ascr', '.autokey']
+    
+    # 遍历所有定义的目录
     for key, dir_path in BASE_DIRS.items():
         if dir_path.exists():
-            for file in dir_path.rglob('*'):
-                # 排除 autokey json
-                if file.is_file() and file.suffix.lower() in supported_extensions and not file.name.endswith('.json'):
-                    display_name = f"[{key}] {file.name}"
-                    scripts.append({'name': display_name, 'path': str(file)})
+            try:
+                # 递归查找或单层查找，这里使用 rglob 递归查找
+                for file in dir_path.rglob('*'):
+                    # 排除 autokey json 和隐藏文件
+                    if file.is_file() and \
+                       file.suffix.lower() in supported_extensions and \
+                       not file.name.endswith('.json') and \
+                       not file.name.startswith('.'):
+                        
+                        display_name = f"[{key}] {file.name}"
+                        scripts.append({'name': display_name, 'path': str(file)})
+            except Exception as e:
+                logger.error(f"Error scanning dir {dir_path}: {e}")
+                
     return scripts
 
 @app.route('/api/tasks', methods=['GET', 'POST'])
@@ -270,18 +300,14 @@ def get_available_scripts():
 def manage_tasks():
     if request.method == 'POST':
         data = request.json
-        # 获取新字段
         schedule_type = data.get('schedule_type', 'cron')
         random_start = data.get('random_start')
         random_end = data.get('random_end')
         cron_expression = data.get('cron_expression')
 
-        # 如果是随机模式，覆盖 cron_expression
         if schedule_type == 'random' and random_start:
-            # 存入数据库的 Cron 表达式设置为 开始时间，具体随机由 scheduler 处理
             try:
                 hour, minute = random_start.split(':')
-                # 格式: 分 时 * * *
                 cron_expression = f"{int(minute)} {int(hour)} * * *"
             except:
                 pass
@@ -349,14 +375,12 @@ def update_task(task_id):
         task.name = data.get('name', task.name)
         task.enabled = data.get('enabled', task.enabled)
         
-        # 更新调度信息
         schedule_type = data.get('schedule_type', 'cron')
         task.schedule_type = schedule_type
         
         if schedule_type == 'random':
             task.random_start = data.get('random_start')
             task.random_end = data.get('random_end')
-            # 自动生成对应的 cron 表达式作为基础触发点
             if task.random_start:
                 try:
                     hour, minute = task.random_start.split(':')
@@ -379,7 +403,6 @@ def run_task_now(task_id):
     task = db.session.get(Task, task_id)
     if not task: return jsonify({'error': 'Task not found'}), 404
     
-    # 将任务提交到线程池，并传入 app 实例以建立上下文
     task_executor_pool.submit(run_task_with_context, app, task_id)
     return jsonify({'success': True, 'message': '任务已加入执行队列'})
 
@@ -399,13 +422,9 @@ def toggle_task(task_id):
 # --- 执行逻辑 ---
 
 def run_task_with_context(app_instance, task_id):
-    """
-    专门的线程入口函数，确保 Flask Context 和 DB Session 正确
-    """
     print(f"🧵 Thread started for task {task_id}")
     try:
         with app_instance.app_context():
-            # 在新线程中执行
             success = execute_script_core(task_id)
             print(f"🧵 Thread finished for task {task_id}, Success: {success}")
     except Exception as e:
@@ -414,9 +433,6 @@ def run_task_with_context(app_instance, task_id):
         traceback.print_exc()
 
 def execute_script_core(task_id):
-    """
-    核心执行逻辑，需在 App Context 内调用
-    """
     task = db.session.get(Task, task_id)
     if not task:
         print(f"❌ execute_script_core: Task {task_id} not found in DB")
@@ -424,13 +440,11 @@ def execute_script_core(task_id):
     
     print(f"🚀 Executing task: {task.name} ({task.script_path})")
     
-    # 更新运行时间
-    # 核心优化：使用系统时区获取时间，但转为 naive 存储以兼容 SQLite
     task.last_run = datetime.now(SYSTEM_TZ).replace(tzinfo=None)
     db.session.commit()
 
     script_path = task.script_path
-    # 简单的路径清理
+    # 路径清理
     if script_path.startswith("[downloads] "): script_path = script_path.replace("[downloads] ", "", 1)
     if script_path.startswith("[autokey] "): script_path = script_path.replace("[autokey] ", "", 1)
     
@@ -443,13 +457,18 @@ def execute_script_core(task_id):
             success = execute_python_script(task.name, script_path)
         elif script_path.lower().endswith('.ascr'):
             success = execute_actiona_script(task.name, script_path)
-        elif 'autokey' in script_path.lower(): # 简单判断
+        elif 'autokey' in script_path.lower():
             # AutoKey 只需要文件名 stem
             stem = Path(script_path).stem
             success = execute_autokey_script(stem, task.name)
         else:
-            logger.error(f"Unsupported script type: {script_path}")
-            success = False
+            # 可能是 autokey 的常规脚本路径，尝试作为 autokey 执行
+            if 'MyScripts' in script_path:
+                 stem = Path(script_path).stem
+                 success = execute_autokey_script(stem, task.name)
+            else:
+                logger.error(f"Unsupported script type: {script_path}")
+                success = False
         
         task.last_status = 'Success' if success else 'Failed'
         db.session.commit()
@@ -461,9 +480,7 @@ def execute_script_core(task_id):
         db.session.commit()
         return False
 
-# 调度器的回调函数 (APScheduler 也会在线程中运行)
 def execute_script(task_id):
-    # APScheduler 没有 request context，需要手动 push app context
     with app.app_context():
         execute_script_core(task_id)
 
@@ -506,7 +523,6 @@ def execute_python_script(task_name, script_path):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
     try:
-        # 使用 sys.executable 确保使用 venv 中的 python
         cmd = [sys.executable, script_path]
         print(f"Running command: {cmd}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
@@ -544,7 +560,6 @@ def execute_autokey_script(script_stem, task_name):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
     try:
-        # AutoKey 必须在运行中
         cmd = ['autokey-run', '-s', script_stem]
         print(f"Running AutoKey: {cmd}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
@@ -563,37 +578,25 @@ def execute_autokey_script(script_stem, task_name):
         logger.error(f"AutoKey Error: {e}")
         return False
 
-# --- 调度逻辑 ---
 def schedule_task(task):
-    """
-    将任务添加到 APScheduler。
-    核心升级：支持随机时间段抖动 (Jitter)。
-    """
     if task.enabled:
         try:
             trigger = None
-            
-            # 模式 1: 随机时间段
             if getattr(task, 'schedule_type', 'cron') == 'random' and task.random_start and task.random_end:
                 try:
                     start_h, start_m = map(int, task.random_start.split(':'))
                     end_h, end_m = map(int, task.random_end.split(':'))
                     
-                    # 使用当前日期来计算秒数差
                     now = datetime.now(SYSTEM_TZ)
                     start_dt = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
                     end_dt = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
                     
-                    # 如果结束时间小于开始时间，说明跨天 (例如 23:00 - 01:00)
                     if end_dt < start_dt:
                         end_dt += timedelta(days=1)
                     
-                    # 计算最大延迟秒数
                     diff_seconds = int((end_dt - start_dt).total_seconds())
-                    # 至少留 1 分钟窗口
                     if diff_seconds < 60: diff_seconds = 60
                     
-                    # 创建 Cron 触发器：固定在开始时间触发，但加上随机抖动
                     trigger = CronTrigger(
                         hour=start_h, 
                         minute=start_m, 
@@ -603,10 +606,7 @@ def schedule_task(task):
                     logger.info(f"Task {task.name}: Random schedule {task.random_start}-{task.random_end} (window: {diff_seconds}s)")
                 except Exception as e:
                     logger.error(f"Random schedule parse error for {task.name}: {e}")
-                    # 回退到普通 cron
                     trigger = CronTrigger.from_crontab(task.cron_expression, timezone=SYSTEM_TZ)
-            
-            # 模式 2: 普通 Cron
             else:
                 trigger = CronTrigger.from_crontab(task.cron_expression, timezone=SYSTEM_TZ)
             
@@ -619,17 +619,12 @@ def schedule_task(task):
                     replace_existing=True
                 )
                 logger.info(f'✅ Task {task.name} scheduled. Next run range: {job.next_run_time}')
-            
         except Exception as e:
             logger.error(f'Schedule failed for {task.name}: {e}')
 
 def initialize_system():
     with app.app_context():
         try:
-            # 数据库初始化脚本已经处理了创建和迁移，这里主要用于确认 Admin 存在
-            # 并且在应用启动时恢复调度
-            
-            # 确保 Admin 存在 (双重保险)
             admin_user = os.environ.get('ADMIN_USERNAME', 'admin')
             if not User.query.filter_by(username=admin_user).first():
                 user = User(username=admin_user)
@@ -637,15 +632,12 @@ def initialize_system():
                 db.session.add(user)
                 db.session.commit()
             
-            # 恢复任务调度
             tasks = Task.query.filter_by(enabled=True).all()
             for task in tasks:
                 schedule_task(task)
-                
         except Exception as e:
             print(f"Init error: {e}")
 
-# 启动初始化
 initialize_system()
 
 if __name__ == '__main__':
