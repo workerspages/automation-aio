@@ -39,6 +39,8 @@ services:
 
       - ENABLE_CLOUDFLARE_TUNNEL=false
       - CLOUDFLARE_TUNNEL_TOKEN=
+
+      # 显示面画在编号为 1 的虚拟显示器上
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
