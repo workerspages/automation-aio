@@ -12,38 +12,37 @@ services:
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin123
       
+      # === 数据库配置 (可选：连接外部 MariaDB) ===
+      # 如果留空或注释，默认使用容器内置的 SQLite
+      - MARIADB_HOST=           # 例如: 192.168.1.100
+      - MARIADB_PORT=3306
+      - MARIADB_USER=root
+      - MARIADB_PASSWORD=root
+      - MARIADB_DB=automation_aio
+      # =======================================
+
       # Telegram 通知配置
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
 
-      # === 新增：邮件通知配置 ===
+      # === 邮件通知配置 ===
       - ENABLE_EMAIL_NOTIFY=true
-      # SMTP服务器地址 (例如 Gmail: smtp.gmail.com, QQ: smtp.qq.com)
       - SMTP_HOST=smtp.gmail.com
-      # SMTP端口 (TLS通常为587, SSL通常为465)
       - SMTP_PORT=587
-      # 发件人邮箱账号
       - SMTP_USER=your_email@gmail.com
-      # 邮箱密码或应用专用密码 (不要使用登录密码)
       - SMTP_PASSWORD=your_app_password
-      # 发件人显示地址
       - EMAIL_FROM=your_email@gmail.com
-      # 收件人地址
       - EMAIL_TO=receiver@example.com
-      # ==========================
-
+      
       - ENABLE_CLOUDFLARE_TUNNEL=false
       - CLOUDFLARE_TUNNEL_TOKEN=
-
-      # 显示面画在编号为 1 的虚拟显示器上
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
-      - ./data:/app/data  # 持久化数据库
-      - ./logs:/app/logs  # 持久化日志
+      - ./data:/app/data
+      - ./logs:/app/logs
     restart: unless-stopped
     shm_size: '2gb'
-    # 添加健康检查
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s
