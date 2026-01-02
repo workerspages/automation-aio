@@ -4,6 +4,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
+[![Database](https://img.shields.io/badge/Database-SQLite%20%7C%20MariaDB-orange)]()
 
 **Ubuntu Automation AIO (All-In-One)** 是一个基于 Docker 的全能自动化工控平台。它集成了一个完整的 Ubuntu 桌面环境、强大的 Web 管理面板、可视化任务调度器以及多种自动化工具（Selenium, Playwright, AutoKey, Actiona）。
 
@@ -33,7 +34,12 @@
 - **Cron 调度**: 支持标准的 Cron 表达式（如 `0 9 * * *`）。
 - **🎲 拟人化随机调度**: 设定时间段（如 `09:00 - 10:00`），系统会在此范围内**随机选择时间点**执行任务，有效规避风控检测。
 
-### 📝 在线脚本开发 (New!)
+### 🔌 数据持久化 (New!)
+- **双模数据库支持**:
+  - **SQLite (默认)**: 零配置，开箱即用，数据存储在本地文件。
+  - **MariaDB / MySQL**: 支持连接外部数据库，适合集群部署或数据量较大的场景。只需配置环境变量即可自动切换。
+
+### 📝 在线脚本开发
 - **在线代码编辑器**: 集成 CodeMirror，支持 Python 语法高亮。
 - **直接调试**: 在网页上编写代码 -> 保存 -> 立即运行，告别繁琐的文件上传步骤。
 - **AutoKey 无缝集成**: 在网页端编写 AutoKey 脚本，VNC 桌面内即时生效。
@@ -78,6 +84,15 @@ services:
       - ADMIN_USERNAME=admin # Web 面板用户名
       - ADMIN_PASSWORD=admin123 # Web 面板密码
       
+      # === 数据库配置 (可选) ===
+      # 留空则默认使用 SQLite (/app/data/tasks.db)
+      # 填写后将自动连接外部 MariaDB/MySQL
+      - MARIADB_HOST=
+      - MARIADB_PORT=3306
+      - MARIADB_USER=root
+      - MARIADB_PASSWORD=root
+      - MARIADB_DB=automation_aio
+      
       # === 通知配置 (可选) ===
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
@@ -87,6 +102,7 @@ services:
       - SMTP_PORT=587
       - SMTP_USER=your_email@gmail.com
       - SMTP_PASSWORD=your_app_password
+      - EMAIL_FROM=your_email@gmail.com
       - EMAIL_TO=receiver@example.com
 
       # === 远程访问 (可选) ===
@@ -97,7 +113,7 @@ services:
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads        # 脚本存放目录
-      - ./data:/app/data                            # 数据库持久化
+      - ./data:/app/data                            # 数据库持久化 (SQLite文件也在这里)
       - ./logs:/app/logs                            # 日志持久化
     restart: unless-stopped
     shm_size: '2gb' # 防止 Chrome 崩溃的关键配置
@@ -124,14 +140,11 @@ docker-compose up -d
 点击右上角的 **"🖥️ 远程桌面"** 按钮，或者直接访问 `http://<IP>:5000/vnc/vnc.html`。
 - **连接密码**: 你在环境变量 `VNC_PW` 中设置的值（默认 `admin`）。
 
-### 3. 脚本管理与开发 (新功能 🚀)
+### 3. 脚本管理与开发
 点击导航栏的 **"📂 脚本管理"** 按钮：
-
 *   **Downloads 目录**: 存放 Selenium/Playwright 等常规 Python 脚本。
 *   **AutoKey 目录**: 存放 AutoKey 的系统级自动化脚本。
 *   **在线编辑**: 点击文件名右侧的 "✎ 编辑"，在弹出的代码编辑器中直接修改并保存。
-
-> **💡 提示**: 在 Web 端创建/修改 AutoKey 脚本后，VNC 桌面内的 AutoKey 软件会自动检测到更改（可能需要几秒钟）。
 
 ### 4. 添加任务
 点击 **"+ 新建任务"**：
@@ -151,7 +164,11 @@ docker-compose up -d
 | `VNC_PW` | admin | VNC 远程连接密码。 |
 | `ADMIN_USERNAME` | admin | Web 面板登录用户名。 |
 | `ADMIN_PASSWORD` | admin123 | Web 面板登录密码。 |
-| `DISPLAY` | :1 | **请勿修改**。指定 X11 显示端口，连接代码与图形界面。 |
+| **`MARIADB_HOST`** | (空) | **新增**：MariaDB/MySQL 主机地址。如果设置此项，系统将切换到 MariaDB 模式。 |
+| `MARIADB_PORT` | 3306 | MariaDB 端口。 |
+| `MARIADB_USER` | root | 数据库用户名。 |
+| `MARIADB_PASSWORD` | (空) | 数据库密码。 |
+| `MARIADB_DB` | automation | 数据库名称 (首次连接会自动建表)。 |
 | `ENABLE_EMAIL_NOTIFY`| false | 是否启用邮件通知。 |
 | `SMTP_USER` | - | 发件人邮箱账号。 |
 | `SMTP_PASSWORD` | - | 邮箱授权码/应用密码（非登录密码）。 |
@@ -164,7 +181,7 @@ docker-compose up -d
 
 ```text
 /ubuntu-automation
-├── data/           # 存放 tasks.db (任务数据库) 和 automation.log (运行日志)
+├── data/           # 存放 tasks.db (SQLite模式下) 和 automation.log (运行日志)
 ├── logs/           # 存放 Nginx, VNC, Supervisor 等系统日志
 ├── Downloads/      # 映射到容器内的 /home/headless/Downloads，存放常规脚本
 └── docker-compose.yml
@@ -178,7 +195,7 @@ docker-compose up -d
 
 1.  **克隆项目**:
     ```bash
-    git clone https://github.com/your-repo/ubuntu-automation.git
+    git clone https://github.com/workerspages/automation-aio.git
     cd ubuntu-automation
     ```
 
@@ -195,14 +212,14 @@ docker-compose up -d
 
 ### 常见问题 (FAQ)
 
+**Q: 如何从 SQLite 迁移到 MariaDB？**
+A: 目前系统会在启动时检测 `MARIADB_HOST`。如果配置了该变量，系统将自动连接 MariaDB 并初始化空表。**注意：** 原 SQLite 中的任务数据**不会**自动迁移到 MariaDB，你需要手动重新添加任务或自行编写数据迁移脚本。
+
 **Q: 启动后访问 5000 端口报 "502 Bad Gateway"?**
 A: 这通常是因为容器内的 VNC Server 还没完全启动，导致 WebApp 等待依赖文件。请等待 1-2 分钟。如果一直报错，请检查日志：`docker logs ubuntu-automation`。
 
 **Q: Selenium 报错 "DevToolsActivePort file doesn't exist"?**
 A: 请确保 `docker-compose.yml` 中配置了 `shm_size: '2gb'`。Chrome 需要较大的共享内存。
-
-**Q: AutoKey 脚本没有生效？**
-A: 确保你的脚本是 Python 3 语法。Web 端保存后，可以在 VNC 里面打开 AutoKey 界面确认脚本是否已更新。
 
 ---
 
