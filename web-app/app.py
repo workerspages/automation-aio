@@ -25,7 +25,35 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-this')
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:////app/data/tasks.db')
+
+# --- 数据库连接配置逻辑 (支持 SQLite 和 MariaDB) ---
+def get_database_uri():
+    # 1. 优先检查是否配置了 MariaDB 环境变量
+    db_host = os.environ.get('MARIADB_HOST')
+    if db_host:
+        db_user = os.environ.get('MARIADB_USER', 'root')
+        db_pass = os.environ.get('MARIADB_PASSWORD', '')
+        db_port = os.environ.get('MARIADB_PORT', '3306')
+        db_name = os.environ.get('MARIADB_DB', 'automation')
+        
+        # 构建 MariaDB 连接字符串 (使用 pymysql 驱动)
+        # 格式: mysql+pymysql://user:password@host:port/dbname?charset=utf8mb4
+        uri = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
+        print(f"✅ 检测到 MariaDB 配置，将连接至: {db_host}:{db_port}/{db_name}")
+        return uri
+    
+    # 2. 其次检查是否手动指定了完整 URI
+    env_uri = os.environ.get('SQLALCHEMY_DATABASE_URI')
+    if env_uri and 'sqlite' not in env_uri:
+        return env_uri
+
+    # 3. 默认回退到 SQLite
+    print("ℹ️ 未检测到外部数据库配置，使用默认 SQLite。")
+    return os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:////app/data/tasks.db')
+
+app.config['SQLALCHEMY_DATABASE_URI'] = get_database_uri()
+# ---------------------------------------------------
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
