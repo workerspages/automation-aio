@@ -12,3 +12,4 @@ gunicorn>=22.0.0
 opencv-python-headless
 playwright-stealth
 pytz
+pymysql
