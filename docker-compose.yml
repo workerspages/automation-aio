@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:aio
+    image: ghcr.io/workerspages/automation-aio:main-mariadb-20260103
     container_name: ubuntu-automation
     ports:
       - "5000:5000"
