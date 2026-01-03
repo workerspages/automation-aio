@@ -279,7 +279,7 @@ function openEditor(filename, folder) {
     setTimeout(() => {
         initCodeMirror();
         if (filename) {
-            // 加载内容
+            // 加载现有文件
             fetch(`/api/files/content?folder=${folder}&filename=${encodeURIComponent(filename)}`)
                 .then(r => r.json())
                 .then(res => {
@@ -292,8 +292,72 @@ function openEditor(filename, folder) {
                     editorInstance.refresh();
                 });
         } else {
-            // 新建文件
-            editorInstance.setValue('# Write your Python script here\n\nimport time\n\nprint("Hello World")\n');
+            // === 核心修改：新建文件时提供抗检测模板 ===
+            if (folder === 'autokey') {
+                // AutoKey 模板
+                editorInstance.setValue(`# AutoKey Script Template
+import time
+import random
+
+# Human-like typing delay function
+def human_type(text):
+    for char in text:
+        keyboard.send_keys(char)
+        time.sleep(random.uniform(0.05, 0.15))
+
+# Example usage:
+# human_type("Hello World")
+# keyboard.send_key("<enter>")
+`);
+            } else {
+                // Selenium 抗检测模板 (Undetected Chromedriver)
+                editorInstance.setValue(`# Anti-Detection Selenium Template (Default)
+import undetected_chromedriver as uc
+import time
+import random
+from selenium.webdriver.common.by import By
+
+def run():
+    print("Starting Undetected Chrome...")
+    
+    # 配置 Chrome
+    options = uc.ChromeOptions()
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-popup-blocking')
+    
+    # 启动驱动 (Docker内必须设置 use_subprocess=True)
+    driver = uc.Chrome(
+        options=options, 
+        use_subprocess=True,
+        version_main=None
+    )
+    
+    try:
+        # 1. 访问网站
+        print("Navigating...")
+        driver.get('https://nowsecure.nl') # 这是一个测试反爬的网站
+        
+        # 2. 拟人化随机等待
+        time.sleep(random.uniform(2, 4))
+        
+        # 3. 打印标题
+        print(f"Page Title: {driver.title}")
+        
+        # 4. 截图调试 (保存到 data 目录)
+        driver.save_screenshot('/app/data/debug_screenshot.png')
+        print("Screenshot saved to /app/data/debug_screenshot.png")
+        
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        print("Closing browser...")
+        driver.quit()
+
+if __name__ == '__main__':
+    run()
+`);
+            }
             editorInstance.refresh();
         }
     }, 100);
