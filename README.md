@@ -54,32 +54,48 @@ services:
     ports:
       - "5000:5000"
     environment:
-      # === 基础配置 ===
-      - TZ=Asia/Shanghai
-      - VNC_PW=admin           # 远程桌面密码
-      - ADMIN_USERNAME=admin   # Web面板账号
+      - VNC_PW=admin
+      - SECRET_KEY=your-secret-key-change-this
+      - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin123
       
-      # === 通知 (可选) ===
-      - TELEGRAM_BOT_TOKEN=
-      - TELEGRAM_CHAT_ID=
-      
-      # === 数据库 (可选，留空默认用本地 SQLite) ===
-      - MARIADB_HOST=
+      # === 数据库配置 (可选：连接外部 MariaDB) ===
+      # 如果留空或注释，默认使用容器内置的 SQLite
+      - MARIADB_HOST=           # 例如: 192.168.1.100
       - MARIADB_PORT=3306
       - MARIADB_USER=root
       - MARIADB_PASSWORD=root
       - MARIADB_DB=automation_aio
+      # =======================================
 
-      # === 核心显示变量 (勿动) ===
+      # Telegram 通知配置
+      - TELEGRAM_BOT_TOKEN=
+      - TELEGRAM_CHAT_ID=
+
+      # === 邮件通知配置 ===
+      - ENABLE_EMAIL_NOTIFY=true
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=your_email@gmail.com
+      - SMTP_PASSWORD=your_app_password
+      - EMAIL_FROM=your_email@gmail.com
+      - EMAIL_TO=receiver@example.com
+      
+      - ENABLE_CLOUDFLARE_TUNNEL=false
+      - CLOUDFLARE_TUNNEL_TOKEN=
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
       - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
-    # ⚠️ 重要: Chrome/UC 需要较大的共享内存，否则会崩溃
-    shm_size: '2gb' 
+    shm_size: '2gb'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 ```
 
 ### 3. 启动服务
