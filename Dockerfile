@@ -119,7 +119,7 @@ RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd6
     rm -rf /var/lib/apt/lists/*
 
 # ===================================================================
-# 配置 Chrome 启动包装器 (No-Sandbox + 禁止默认浏览器检查)
+# 配置 Chrome 启动包装器
 # ===================================================================
 RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
@@ -129,13 +129,11 @@ RUN mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
 # ===================================================================
 # +++ 新增配置：将 Chrome 设置为系统默认浏览器 +++
 # ===================================================================
-# 1. 设置 update-alternatives 优先级，使其高于 Firefox
 RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/google-chrome-stable 200 && \
     update-alternatives --set x-www-browser /usr/bin/google-chrome-stable && \
     update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/google-chrome-stable 200 && \
     update-alternatives --set gnome-www-browser /usr/bin/google-chrome-stable
 
-# 2. 配置 XDG/MIME 默认关联 (针对 XFCE 桌面环境点击链接)
 RUN mkdir -p /etc/xdg && \
     { \
         echo '[Default Applications]'; \
@@ -147,7 +145,7 @@ RUN mkdir -p /etc/xdg && \
     } >> /etc/xdg/mimeapps.list
 
 # ===================================================================
-# 配置 Chrome 企业策略 (禁用默认浏览器检查、禁用安全横幅、禁用首次运行欢迎页)
+# 配置 Chrome 企业策略
 # ===================================================================
 RUN mkdir -p /etc/opt/chrome/policies/managed && \
     echo '{ \
@@ -161,10 +159,9 @@ RUN mkdir -p /etc/opt/chrome/policies/managed && \
     chmod 644 /etc/opt/chrome/policies/managed/managed_policies.json
 
 # ===================================================================
-# 配置 Firefox 插件 (可选，需确保本地有此目录，否则可注释掉)
+# 配置 Firefox 插件 (可选)
 # ===================================================================
 COPY firefox-plugin/ /app/firefox-plugin/
-
 RUN mkdir -p /etc/firefox/policies && \
     cat << 'EOF' > /etc/firefox/policies/policies.json
 {
@@ -214,35 +211,25 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # ===================================================================
-# +++ 新增：注入浏览器个人配置 (Zip版) +++
+# +++ 注入浏览器个人配置 (Zip版) +++
 # ===================================================================
-# 1. 复制压缩包到临时目录
 COPY browser-configs/chrome.zip /tmp/chrome.zip
 COPY browser-configs/firefox.zip /tmp/firefox.zip
 
-# 2. 解压配置、清理锁文件、修复权限
 RUN mkdir -p /home/headless/.config/google-chrome && \
     mkdir -p /home/headless/.mozilla && \
-    \
     echo "正在解压 Chrome 配置..." && \
     unzip -q /tmp/chrome.zip -d /home/headless/.config/google-chrome/ && \
-    \
     echo "正在解压 Firefox 配置..." && \
     unzip -q /tmp/firefox.zip -d /home/headless/.mozilla/ && \
-    \
-    echo "清理临时文件和浏览器锁文件(防止启动崩溃)..." && \
+    echo "清理临时文件..." && \
     rm /tmp/chrome.zip /tmp/firefox.zip && \
     rm -f /home/headless/.config/google-chrome/SingletonLock && \
-    rm -f /home/headless/.config/google-chrome/SingletonSocket && \
-    rm -f /home/headless/.config/google-chrome/SingletonCookie && \
     find /home/headless/.mozilla -name "lock" -delete && \
-    find /home/headless/.mozilla -name ".parentlock" -delete && \
-    \
-    echo "修正文件权限..." && \
     chown -R headless:headless /home/headless/.config /home/headless/.mozilla
 
 # ===================================================================
-# VNC xstartup脚本 (含防休眠命令及中文输入法变量)
+# VNC xstartup脚本
 # ===================================================================
 RUN mkdir -p /home/headless/.vnc && \
     chown headless:headless /home/headless/.vnc
@@ -252,18 +239,14 @@ RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 unset SESSION_MANAGER
 unset DBUS_SESSION_BUS_ADDRESS
 
-# 启动 D-Bus 并获取地址
 eval $(dbus-launch --sh-syntax)
 export DBUS_SESSION_BUS_ADDRESS
-
-# 将 D-Bus 地址写入文件，供 WebApp 读取
 echo "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS'" > $HOME/.dbus-env
 chmod 644 $HOME/.dbus-env
 
 [ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
 [ -r "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
 
-# 核心：设置 X11 背景并禁用屏保、电源管理信号
 xsetroot -solid grey &
 xset s off &
 xset -dpms &
@@ -282,11 +265,10 @@ export XDG_SESSION_DESKTOP=xfce
 
 exec /usr/bin/startxfce4
 EOF
-
 RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 配置 AutoKey 自启动 (双重保障：Desktop Entry + Supervisor)
+# 配置 AutoKey 自启动
 # ===================================================================
 RUN mkdir -p /home/headless/.config/autostart && \
     printf "[Desktop Entry]\nType=Application\nName=AutoKey\nExec=autokey-gtk\nTerminal=false\n" > /home/headless/.config/autostart/autokey.desktop && \
@@ -310,7 +292,6 @@ RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
 RUN mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
     chown -R headless:headless /home/headless/.config
 
-# 配置电源管理器：强制演示模式，禁止任何睡眠/休眠动作
 RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <channel name="xfce4-power-manager" version="1.0">
@@ -451,7 +432,6 @@ except Exception as e:
     traceback.print_exc()
     sys.exit(1)
 EOF
-
 RUN chmod +x /usr/local/bin/init-database
 
 # ===================================================================
@@ -462,7 +442,5 @@ RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chmod +x /app/scripts/*.sh 2>/dev/null || true
 
 EXPOSE 5000
-
 WORKDIR /app
-
 CMD ["/app/scripts/entrypoint.sh"]
