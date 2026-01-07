@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:aio
-    container_name: ubuntu-automation
+  automation-aio:
+    image: ghcr.io/workerspages/automation-aio:mariadb
+    container_name: automation-aio
     ports:
       - "5000:5000"
     environment:
@@ -35,7 +35,7 @@ services:
       - EMAIL_TO=receiver@example.com
       
       - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=
+      - CLOUDFLARE_TUNNEL_TOKEN=xxxxxxxxx
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
