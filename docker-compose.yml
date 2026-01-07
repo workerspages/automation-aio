@@ -1,9 +1,9 @@
 version: '3.8'
 
 services:
-  ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:aio
-    container_name: ubuntu-automation
+  automation-aio:
+    image: ghcr.io/workerspages/automation-aio:main
+    container_name: automation-aio
     ports:
       - "5000:5000"
     environment:
@@ -33,7 +33,7 @@ services:
       # ==========================
 
       - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=
+      - CLOUDFLARE_TUNNEL_TOKEN=xxxxxxxxxxx
 
       # 显示面画在编号为 1 的虚拟显示器上
       - DISPLAY=:1
