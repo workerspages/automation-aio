@@ -73,50 +73,54 @@ cd ubuntu-automation
 version: '3.8'
 
 services:
-  ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:aio  # 或者你构建的本地镜像名
-    container_name: ubuntu-automation
+  automation-aio:
+    image: ghcr.io/workerspages/automation-aio:mariadb
+    container_name: automation-aio
     ports:
-      - "5000:5000"  # Web 控制面板端口
+      - "5000:5000"
     environment:
-      - TZ=Asia/Shanghai
-      - VNC_PW=admin        # VNC 远程桌面密码
-      - ADMIN_USERNAME=admin # Web 面板用户名
-      - ADMIN_PASSWORD=admin123 # Web 面板密码
+      - VNC_PW=admin
+      - SECRET_KEY=your-secret-key-change-this
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
       
-      # === 数据库配置 (可选) ===
-      # 留空则默认使用 SQLite (/app/data/tasks.db)
-      # 填写后将自动连接外部 MariaDB/MySQL
-      - MARIADB_HOST=
+      # === 数据库配置 (可选：连接外部 MariaDB) ===
+      # 如果留空或注释，默认使用容器内置的 SQLite
+      - MARIADB_HOST=           # 例如: 192.168.1.100
       - MARIADB_PORT=3306
       - MARIADB_USER=root
       - MARIADB_PASSWORD=root
       - MARIADB_DB=automation_aio
-      
-      # === 通知配置 (可选) ===
+      # =======================================
+
+      # Telegram 通知配置
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
-      
-      - ENABLE_EMAIL_NOTIFY=false
+
+      # === 邮件通知配置 ===
+      - ENABLE_EMAIL_NOTIFY=true
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=587
       - SMTP_USER=your_email@gmail.com
       - SMTP_PASSWORD=your_app_password
       - EMAIL_FROM=your_email@gmail.com
       - EMAIL_TO=receiver@example.com
-
-      # === 远程访问 (可选) ===
-      - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=
       
-      # === 核心显示变量 (勿动) ===
+      - ENABLE_CLOUDFLARE_TUNNEL=false
+      - CLOUDFLARE_TUNNEL_TOKEN=xxxxxxxxx
       - DISPLAY=:1
     volumes:
-      - ./Downloads:/home/headless/Downloads        # 脚本存放目录
-      - ./data:/app/data                            # 数据库持久化 (SQLite文件也在这里)
-      - ./logs:/app/logs                            # 日志持久化
+      - ./Downloads:/home/headless/Downloads
+      - ./data:/app/data
+      - ./logs:/app/logs
     restart: unless-stopped
-    shm_size: '2gb' # 防止 Chrome 崩溃的关键配置
+    shm_size: '2gb'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 ```
 
 ### 3. 启动服务
