@@ -67,40 +67,55 @@ cd ubuntu-automation
 version: '3.8'
 
 services:
-  ubuntu-automation:
-    image: ghcr.io/workerspages/ubuntu-automation:aio  # 或者你构建的本地镜像名
-    container_name: ubuntu-automation
+  automation-aio:
+    image: ghcr.io/workerspages/automation-aio:main
+    container_name: automation-aio
     ports:
-      - "5000:5000"  # Web 控制面板端口
+      - "5000:5000"
     environment:
-      - TZ=Asia/Shanghai
-      - VNC_PW=admin        # VNC 远程桌面密码
-      - ADMIN_USERNAME=admin # Web 面板用户名
-      - ADMIN_PASSWORD=admin123 # Web 面板密码
+      - VNC_PW=admin
+      - SECRET_KEY=your-secret-key-change-this
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
       
-      # === 通知配置 (可选) ===
+      # Telegram 通知配置
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
-      
-      - ENABLE_EMAIL_NOTIFY=false
-      - SMTP_HOST=smtp.gmail.com
-      - SMTP_PORT=587
-      - SMTP_USER=your_email@gmail.com
-      - SMTP_PASSWORD=your_app_password
-      - EMAIL_TO=receiver@example.com
 
-      # === 远程访问 (可选) ===
+      # === 新增：邮件通知配置 ===
+      - ENABLE_EMAIL_NOTIFY=true
+      # SMTP服务器地址 (例如 Gmail: smtp.gmail.com, QQ: smtp.qq.com)
+      - SMTP_HOST=smtp.gmail.com
+      # SMTP端口 (TLS通常为587, SSL通常为465)
+      - SMTP_PORT=587
+      # 发件人邮箱账号
+      - SMTP_USER=your_email@gmail.com
+      # 邮箱密码或应用专用密码 (不要使用登录密码)
+      - SMTP_PASSWORD=your_app_password
+      # 发件人显示地址
+      - EMAIL_FROM=your_email@gmail.com
+      # 收件人地址
+      - EMAIL_TO=receiver@example.com
+      # ==========================
+
       - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=
-      
-      # === 核心显示变量 (勿动) ===
+      - CLOUDFLARE_TUNNEL_TOKEN=xxxxxxxxxxx
+
+      # 显示面画在编号为 1 的虚拟显示器上
       - DISPLAY=:1
     volumes:
-      - ./Downloads:/home/headless/Downloads        # 脚本存放目录
-      - ./data:/app/data                            # 数据库持久化
-      - ./logs:/app/logs                            # 日志持久化
+      - ./Downloads:/home/headless/Downloads
+      - ./data:/app/data  # 持久化数据库
+      - ./logs:/app/logs  # 持久化日志
     restart: unless-stopped
-    shm_size: '2gb' # 防止 Chrome 崩溃的关键配置
+    shm_size: '2gb'
+    # 添加健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 ```
 
 ### 3. 启动服务
