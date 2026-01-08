@@ -124,7 +124,7 @@ function runTaskNow(taskId) {
     fetch(`/api/tasks/${taskId}/run`, { method: 'POST' })
         .then(r => r.json())
         .then(res => {
-            if (res.success) alert('任务已开始执行');
+            if (res.success) alert('任务已加入队列');
             else alert('执行失败: ' + res.error);
         });
 }
@@ -176,20 +176,18 @@ function updateCronHelp(expression) {
 
 function openFileManager() {
     currentFolder = 'downloads';
-    switchFolder('downloads'); // 默认加载
+    switchFolder('downloads'); 
     document.getElementById('fileManagerModal').style.display = 'block';
 }
 
 function switchFolder(folder) {
     currentFolder = folder;
-    
-    // UI Tab Update
     document.querySelectorAll('.folder-tab').forEach(el => el.classList.remove('active'));
     document.getElementById(`tab-${folder}`).classList.add('active');
     
     const pathHint = folder === 'autokey' 
-        ? '正在查看: /home/headless/.config/autokey/data/MyScripts (AutoKey脚本)' 
-        : '正在查看: /home/headless/Downloads (常规脚本)';
+        ? '正在查看: AutoKey 脚本 (系统级)' 
+        : '正在查看: 常规脚本 (Selenium/Python)';
     document.getElementById('current-path-hint').textContent = pathHint;
 
     loadFiles(folder);
@@ -229,28 +227,22 @@ function loadFiles(folder) {
 }
 
 function createNewScript() {
-    openEditor('', currentFolder); // 打开空编辑器
+    openEditor('', currentFolder);
 }
 
 function deleteScript(filename, folder) {
     if (!confirm(`确定要删除 ${filename} 吗？`)) return;
     
-    fetch(`/api/files?folder=${folder}&filename=${encodeURIComponent(filename)}`, {
-        method: 'DELETE'
-    })
+    fetch(`/api/files?folder=${folder}&filename=${encodeURIComponent(filename)}`, { method: 'DELETE' })
     .then(r => r.json())
     .then(res => {
-        if (res.success) {
-            loadFiles(folder);
-        } else {
-            alert('删除失败: ' + res.error);
-        }
+        if (res.success) loadFiles(folder);
+        else alert('删除失败: ' + res.error);
     });
 }
 
-// 初始化编辑器
 function initCodeMirror() {
-    if (editorInstance) return; // 已经初始化过
+    if (editorInstance) return; 
     const textarea = document.getElementById('codeEditor');
     editorInstance = CodeMirror.fromTextArea(textarea, {
         mode: 'python',
@@ -262,24 +254,19 @@ function initCodeMirror() {
 }
 
 function openEditor(filename, folder) {
-    // 1. 初始化UI
     document.getElementById('editorFolder').value = folder;
-    document.getElementById('editorFilename').value = filename; // 原始文件名
+    document.getElementById('editorFilename').value = filename; 
     
     const nameDisplay = document.getElementById('editorFilenameDisplay');
     nameDisplay.value = filename;
-    nameDisplay.disabled = !!filename; // 如果是编辑现有文件，禁止改名(简化逻辑)
+    nameDisplay.disabled = !!filename; 
     
     document.getElementById('editorTitle').textContent = filename ? '编辑脚本' : '新建脚本';
-
-    // 2. 显示 Modal (必须先显示Modal，CodeMirror才能正确计算宽高)
     document.getElementById('editorModal').style.display = 'block';
     
-    // 3. 延迟初始化或刷新编辑器
     setTimeout(() => {
         initCodeMirror();
         if (filename) {
-            // 加载内容
             fetch(`/api/files/content?folder=${folder}&filename=${encodeURIComponent(filename)}`)
                 .then(r => r.json())
                 .then(res => {
@@ -292,8 +279,8 @@ function openEditor(filename, folder) {
                     editorInstance.refresh();
                 });
         } else {
-            // 新建文件
-            editorInstance.setValue('# Write your Python script here\n\nimport time\n\nprint("Hello World")\n');
+            // 默认 Python 模板
+            editorInstance.setValue('# Python Automation Script\nimport time\n\nprint("Script started")\ntime.sleep(1)\nprint("Done")\n');
             editorInstance.refresh();
         }
     }, 100);
@@ -301,7 +288,6 @@ function openEditor(filename, folder) {
 
 function saveScriptContent() {
     const folder = document.getElementById('editorFolder').value;
-    const originalFilename = document.getElementById('editorFilename').value;
     let filename = document.getElementById('editorFilenameDisplay').value.trim();
     const content = editorInstance.getValue();
 
@@ -310,8 +296,8 @@ function saveScriptContent() {
         return;
     }
     
-    // 自动补全 .py (如果缺失)
-    if (!filename.endsWith('.py') && !filename.endsWith('.side') && !filename.endsWith('.ascr')) {
+    // === 关键修改：只保留 .py 和 .side 的自动补全 ===
+    if (!filename.endsWith('.py') && !filename.endsWith('.side')) {
         filename += '.py';
     }
 
@@ -329,7 +315,6 @@ function saveScriptContent() {
         if (res.success) {
             alert('保存成功!');
             closeModal('editorModal');
-            // 如果是新建文件或者覆盖文件，刷新文件列表
             if (document.getElementById('fileManagerModal').style.display === 'block') {
                 loadFiles(folder);
             }
@@ -340,7 +325,6 @@ function saveScriptContent() {
     .catch(e => alert('请求错误: ' + e));
 }
 
-// --- 通用 Modal ---
 function closeModal(modalId) {
     document.getElementById(modalId).style.display = 'none';
     if (modalId === 'taskModal') currentTaskId = null;
