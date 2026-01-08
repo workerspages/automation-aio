@@ -404,9 +404,9 @@ def execute_script_core(task_id):
     success = False
     try:
         if 'autokey/data' in script_path or 'MyScripts' in script_path:
-             stem = Path(script_path).stem
-             print(f"🔄 Detected AutoKey script: {stem}")
-             success = execute_autokey_script(stem, task.name)
+             script_name = Path(script_path).name
+             print(f"🔄 Detected AutoKey script: {script_name}")
+             success = execute_autokey_script(script_name, task.name)
         elif script_path.lower().endswith('.py'):
             print(f"🐍 Running Python script: {script_path}")
             success = execute_python_script(task.name, script_path)
