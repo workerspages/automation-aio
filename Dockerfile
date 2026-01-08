@@ -404,7 +404,7 @@ environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH
 priority=40
 
 [program:autokey]
-command=/usr/bin/autokey-gtk --verbose
+command=/bin/bash -c "while [ ! -f /home/headless/.dbus-env ]; do sleep 1; done; source /home/headless/.dbus-env; exec /usr/bin/autokey-gtk --verbose"
 environment=DISPLAY=":1"
 user=headless
 autostart=true
