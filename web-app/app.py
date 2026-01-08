@@ -403,7 +403,7 @@ def execute_script_core(task_id):
     
     success = False
     try:
-        if 'autokey/data' in script_path or 'MyScripts' in script_path:
+        if 'autokey/data' in script_path or 'Sample Scripts' in script_path:
              script_name = Path(script_path).name
              print(f"🔄 Detected AutoKey script: {script_name}")
              success = execute_autokey_script(script_name, task.name)
