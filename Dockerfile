@@ -115,7 +115,14 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
     chown -R headless:headless /app /home/headless
 
 # 写入 Openbox 自启动配置 (替代 XFCE)
-RUN echo 'tint2 & \n\
+# 解释：
+# 1. autocutsel -fork -selection PRIMARY: 同步鼠标选中内容
+# 2. autocutsel -fork -selection CLIPBOARD: 同步 Ctrl+C 内容
+# 3. tint2: 任务栏
+# 4. autokey: 自动化工具
+RUN echo 'autocutsel -fork -selection PRIMARY & \n\
+autocutsel -fork -selection CLIPBOARD & \n\
+tint2 & \n\
 pcmanfm --desktop --profile LXDE & \n\
 /usr/bin/autokey-gtk --verbose &' > /home/headless/.config/openbox/autostart && \
     chown headless:headless /home/headless/.config/openbox/autostart
