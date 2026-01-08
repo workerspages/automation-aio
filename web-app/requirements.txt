@@ -5,12 +5,8 @@ APScheduler>=3.10.4
 requests>=2.31.0
 selenium>=4.15.2
 webdriver-manager>=4.0.1
-# Playwright 仍然需要，即使只用 Chrome
 playwright>=1.40.0
 python-telegram-bot>=20.7
-cryptography>=41.0.7
 gunicorn>=22.0.0
-opencv-python-headless
-playwright-stealth
 pytz
 pymysql
