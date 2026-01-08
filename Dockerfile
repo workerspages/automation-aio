@@ -121,7 +121,7 @@ RUN apt-get update && \
 # 配置 Openbox (替代 XFCE)
 # ===================================================================
 RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
-             /home/headless/.config/autokey/data/MyScripts \
+             /home/headless/.config/autokey/data/Sample\ Scripts \
              /home/headless/.config/autokey/data/My\ Phrases \
              /home/headless/.config/openbox \
              /home/headless/.config/tint2 \
