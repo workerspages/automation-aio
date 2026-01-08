@@ -350,69 +350,7 @@ COPY scripts/ /app/scripts/
 # ===================================================================
 # Supervisor配置
 # ===================================================================
-RUN cat << 'EOF' > /etc/supervisor/conf.d/services.conf
-[supervisord]
-nodaemon=true
-user=root
-logfile=/app/logs/supervisord.log
-pidfile=/var/run/supervisord.pid
-
-[unix_http_server]
-file=/var/run/supervisor.sock
-chmod=0700
-
-[supervisorctl]
-serverurl=unix:///var/run/supervisor.sock
-
-[rpcinterface:supervisor]
-supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
-
-[program:vncserver]
-command=/bin/bash -c "rm -f /tmp/.X1-lock /tmp/.X11-unix/X1; su - headless -c 'vncserver :1 -geometry 1360x768 -depth 24 -rfbport 5901 -localhost no -fg'"
-autostart=true
-autorestart=true
-stdout_logfile=/app/logs/vncserver.log
-stderr_logfile=/app/logs/vncserver-error.log
-priority=10
-
-[program:novnc]
-command=/usr/bin/websockify --web=/usr/share/novnc 6901 localhost:5901
-autostart=true
-autorestart=true
-stdout_logfile=/app/logs/novnc.log
-stderr_logfile=/app/logs/novnc-error.log
-user=headless
-priority=20
-
-[program:nginx]
-command=/usr/sbin/nginx -g "daemon off;"
-autostart=true
-autorestart=true
-stdout_logfile=/app/logs/nginx.log
-stderr_logfile=/app/logs/nginx-error.log
-priority=30
-
-[program:webapp]
-command=/bin/bash -c "while [ ! -f /home/headless/.dbus-env ]; do sleep 1; done; source /home/headless/.dbus-env; exec /opt/venv/bin/gunicorn --workers 1 --threads 8 --timeout 300 --bind 0.0.0.0:8000 app:app"
-directory=/app/web-app
-autostart=true
-autorestart=true
-stdout_logfile=/app/logs/webapp.log
-stderr_logfile=/app/logs/webapp-error.log
-user=headless
-environment=HOME="/home/headless",USER="headless",PATH="/opt/venv/bin:%(ENV_PATH)s",DISPLAY=":1",PLAYWRIGHT_BROWSERS_PATH="/opt/playwright"
-priority=40
-
-[program:autokey]
-command=/bin/bash -c "while [ ! -f /home/headless/.dbus-env ]; do sleep 1; done; source /home/headless/.dbus-env; exec /usr/bin/autokey-gtk --verbose"
-environment=DISPLAY=":1"
-user=headless
-autostart=true
-autorestart=true
-stdout_logfile=/app/logs/autokey.log
-stderr_logfile=/app/logs/autokey-error.log
-priority=25
-EOF
+COPY services.conf /etc/supervisor/conf.d/services.conf
 
 # ===================================================================
 # 数据库初始化脚本 (调用 web-app/init_db.py 以支持自动迁移)
