@@ -415,44 +415,11 @@ priority=25
 EOF
 
 # ===================================================================
-# 数据库初始化脚本
+# 数据库初始化脚本 (调用 web-app/init_db.py 以支持自动迁移)
 # ===================================================================
-RUN cat << 'EOF' > /usr/local/bin/init-database
-#!/usr/bin/env python3
-import sys
-import os
-
-sys.path.insert(0, '/app/web-app')
-
-try:
-    from app import app, db, User
-    
-    with app.app_context():
-        print("创建数据库表...")
-        db.create_all()
-        
-        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        
-        existing_user = User.query.filter_by(username=admin_username).first()
-        if not existing_user:
-            user = User(username=admin_username)
-            user.password = admin_password
-            db.session.add(user)
-            db.session.commit()
-            print(f"✅ 管理员用户已创建: {admin_username}")
-        else:
-            print(f"✅ 管理员用户已存在: {admin_username}")
-        print("数据库初始化完成!")
-        sys.exit(0)
-except Exception as e:
-    print(f"❌ 数据库初始化失败: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
-EOF
-
-RUN chmod +x /usr/local/bin/init-database
+RUN echo '#!/bin/bash' > /usr/local/bin/init-database && \
+    echo 'cd /app/web-app && /opt/venv/bin/python3 init_db.py' >> /usr/local/bin/init-database && \
+    chmod +x /usr/local/bin/init-database
 
 # ===================================================================
 # 设置权限及端口暴露
