@@ -96,8 +96,9 @@ RUN apt-get update && \
     apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # ===================================================================
-# Openbox 配置
+# 配置 Openbox (替代 XFCE)
 # ===================================================================
+# 预创建所有必要目录
 RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
              /home/headless/.config/autokey/data/MyScripts \
              /home/headless/.config/autokey/data/My\ Phrases \
@@ -106,6 +107,34 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
              /home/headless/.vnc && \
     chown -R headless:headless /app /home/headless
 
+# === 新增：强制 Tint2 任务栏在屏幕顶部 ===
+RUN echo 'panel_position = top center horizontal\n\
+panel_size = 100% 30\n\
+panel_layer = top\n\
+panel_items = TSC\n\
+panel_background_id = 1\n\
+wm_menu = 1\n\
+panel_dock = 0\n\
+rounded = 0\n\
+border_width = 0\n\
+background_color = #222222 100\n\
+border_color = #000000 0\n\
+taskbar_mode = single_desktop\n\
+taskbar_padding = 2 2 2\n\
+taskbar_background_id = 0\n\
+taskbar_active_background_id = 1\n\
+systray_padding = 4 2 4\n\
+systray_sort = right2left\n\
+systray_background_id = 0\n\
+systray_icon_size = 20\n\
+time1_format = %H:%M\n\
+time2_format = %A %d %B\n\
+clock_font_color = #eeeeee 100\n\
+clock_padding = 4 2\n\
+clock_background_id = 0' > /home/headless/.config/tint2/tint2rc && \
+    chown -R headless:headless /home/headless/.config/tint2
+
+# 写入 Openbox 自动启动脚本
 RUN echo 'autocutsel -fork -selection PRIMARY & \n\
 autocutsel -fork -selection CLIPBOARD & \n\
 tint2 & \n\
