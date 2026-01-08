@@ -1,5 +1,5 @@
 # ===================================================================
-# 基础镜像
+# 基础镜像与环境
 # ===================================================================
 FROM ubuntu:22.04
 
@@ -41,23 +41,32 @@ ENV TZ=Asia/Shanghai \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 # ===================================================================
-# 系统安装
+# 系统安装 (核心层)
 # ===================================================================
 RUN apt-get update && \
+    # 1. 安装核心工具 (包含 wget, curl, git, ca-certificates)
     apt-get install -y --no-install-recommends \
-    wget curl ca-certificates \
-    sudo tzdata locales net-tools openssh-client \
+    wget curl ca-certificates git \
+    vim nano sudo tzdata locales net-tools openssh-client \
     iproute2 iputils-ping supervisor cron sqlite3 \
+    # 2. 字体 (仅保留微米黑)
     fonts-wqy-microhei language-pack-zh-hans \
+    # 3. X11 / VNC / Audio
     x11-utils x11-xserver-utils xauth xserver-xorg-core xserver-xorg-video-dummy \
     tigervnc-standalone-server tigervnc-common tigervnc-tools \
     libasound2 \
+    # 4. Openbox 桌面环境 (替代 XFCE)
     openbox tint2 pcmanfm lxterminal dbus-x11 libgtk-3-0 \
+    # 5. 剪贴板同步工具
     autocutsel \
+    # 6. Python & 编译依赖
     python3 python3-pip python3-dev python3-gi python3-xdg python3-websockify \
     gir1.2-gtk-3.0 pkg-config gcc g++ make libffi-dev libssl-dev \
+    # 7. 杂项工具
     xautomation xdotool kdialog imagemagick nginx nodejs npm unzip p7zip-full \
+    # 8. AutoKey
     autokey-gtk \
+    # 9. Chrome 依赖库
     libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxrandr2 \
     libpangocairo-1.0-0 libpango-1.0-0 libcups2 libdbus-1-3 libxdamage1 libxfixes3 \
     libgbm1 libdrm2 libwayland-client0 libatspi2.0-0 && \
@@ -70,26 +79,39 @@ RUN apt-get update && \
     rm /tmp/chrome.deb && \
     # 重命名原始二进制
     mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
-    # 创建启动包装脚本
+    # 创建启动包装脚本 (含 --disable-dev-shm-usage)
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
     echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-dev-shm-usage --disable-gpu --no-default-browser-check --no-first-run "$@"' >> /usr/bin/google-chrome-stable && \
     chmod +x /usr/bin/google-chrome-stable && \
+    # Chrome 策略
     mkdir -p /etc/opt/chrome/policies/managed && \
     echo '{ "CommandLineFlagSecurityWarningsEnabled": false, "DefaultBrowserSettingEnabled": false }' > /etc/opt/chrome/policies/managed/managed_policies.json && \
     \
-    # Cloudflare Tunnel
+    # ============================================
+    # 配置浏览器默认关联
+    # ============================================
+    update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/google-chrome-stable 200 && \
+    update-alternatives --set x-www-browser /usr/bin/google-chrome-stable && \
+    \
+    # ============================================
+    # 安装 Cloudflare Tunnel
+    # ============================================
     wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
     dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y && \
     rm -f cloudflared-linux-amd64.deb && \
     \
+    # ============================================
     # 系统配置
+    # ============================================
     ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8 && \
     groupadd -g 1001 headless && \
     useradd -u 1001 -g 1001 -m -s /bin/bash headless && \
     echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
     \
-    # 瘦身清理
+    # ============================================
+    # 瘦身清理 (卸载编译工具)
+    # ============================================
     apt-get remove -y --purge gcc g++ make python3-dev && \
     apt-get autoremove -y && \
     rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/icons/Adwaita /usr/share/icons/HighContrast && \
@@ -107,7 +129,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
              /home/headless/.vnc && \
     chown -R headless:headless /app /home/headless
 
-# === 新增：强制 Tint2 任务栏在屏幕顶部 ===
+# === 新增：强制 Tint2 任务栏在屏幕顶部 (适配坐标脚本) ===
 RUN echo 'panel_position = top center horizontal\n\
 panel_size = 100% 30\n\
 panel_layer = top\n\
@@ -134,7 +156,42 @@ clock_padding = 4 2\n\
 clock_background_id = 0' > /home/headless/.config/tint2/tint2rc && \
     chown -R headless:headless /home/headless/.config/tint2
 
-# 写入 Openbox 自动启动脚本
+# === 新增：自定义 Openbox 右键菜单 (menu.xml) ===
+RUN cat << 'EOF' > /home/headless/.config/openbox/menu.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+<menu id="root-menu" label="Openbox 3">
+  <item label="Google Chrome">
+    <action name="Execute">
+      <command>google-chrome-stable --no-sandbox</command>
+    </action>
+  </item>
+  <item label="AutoKey">
+    <action name="Execute">
+      <command>autokey-gtk --verbose</command>
+    </action>
+  </item>
+  <separator />
+  <item label="Terminal">
+    <action name="Execute">
+      <command>lxterminal</command>
+    </action>
+  </item>
+  <item label="File Manager">
+    <action name="Execute">
+      <command>pcmanfm</command>
+    </action>
+  </item>
+  <separator />
+  <item label="Restart Openbox">
+    <action name="Restart" />
+  </item>
+</menu>
+</openbox_menu>
+EOF
+RUN chown headless:headless /home/headless/.config/openbox/menu.xml
+
+# 写入 Openbox 自动启动脚本 (AutoKey, 剪贴板, 任务栏)
 RUN echo 'autocutsel -fork -selection PRIMARY & \n\
 autocutsel -fork -selection CLIPBOARD & \n\
 tint2 & \n\
@@ -142,6 +199,7 @@ pcmanfm --desktop --profile LXDE & \n\
 /usr/bin/autokey-gtk --verbose &' > /home/headless/.config/openbox/autostart && \
     chown headless:headless /home/headless/.config/openbox/autostart
 
+# VNC 启动脚本 (适配 Openbox)
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
 unset SESSION_MANAGER
@@ -162,14 +220,17 @@ EOF
 RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# noVNC (wget)
+# 安装 noVNC (wget + tar，避免 git 报错)
 # ===================================================================
 WORKDIR /tmp
 RUN mkdir -p /usr/share/novnc && \
     wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar xz --strip-components=1 -C /usr/share/novnc && \
     mkdir -p /usr/share/novnc/utils/websockify && \
     wget -qO- https://github.com/novnc/websockify/archive/refs/tags/v0.11.0.tar.gz | tar xz --strip-components=1 -C /usr/share/novnc/utils/websockify && \
-    ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
+    ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html && \
+    # 修正权限，解决 404 问题
+    chown -R headless:headless /usr/share/novnc && \
+    chmod -R 755 /usr/share/novnc
 
 # ===================================================================
 # Python 环境
