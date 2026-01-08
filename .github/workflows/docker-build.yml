@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ mariadb-20260108 ]
+    branches: [ mariadb ]
     tags: [ "v*" ]
   workflow_dispatch: {}
 
