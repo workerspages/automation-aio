@@ -1,5 +1,5 @@
 # ===================================================================
-# 基础镜像
+# 基础镜像与环境
 # ===================================================================
 FROM ubuntu:22.04
 
@@ -36,98 +36,112 @@ ENV TZ=Asia/Shanghai \
     VNC_PW=admin \
     ADMIN_USERNAME=admin \
     ADMIN_PASSWORD=admin123 \
-    # Openbox 配置路径
-    XDG_CONFIG_HOME=/home/headless/.config \
+    XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg \
+    XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share \
+    XDG_CURRENT_DESKTOP=XFCE \
+    XDG_SESSION_DESKTOP=xfce \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright
 
 # ===================================================================
-# 系统安装 (Openbox 替换 XFCE)
+# 系统安装 (核心层)
 # ===================================================================
 RUN apt-get update && \
-    # 1. 安装核心工具
+    # 1. 安装基础工具 (明确包含 git, wget, curl)
     apt-get install -y --no-install-recommends \
-    wget curl ca-certificates \
-    sudo tzdata locales net-tools openssh-client \
+    wget curl ca-certificates git \
+    vim nano sudo tzdata locales net-tools openssh-client \
     iproute2 iputils-ping supervisor cron sqlite3 \
-    # 字体 (仅保留微米黑，节省 ~100MB)
-    fonts-wqy-microhei language-pack-zh-hans \
+    # 字体
+    fonts-wqy-microhei fonts-noto-cjk language-pack-zh-hans \
     # X11 / VNC / Audio
     x11-utils x11-xserver-utils xauth xserver-xorg-core xserver-xorg-video-dummy \
     tigervnc-standalone-server tigervnc-common tigervnc-tools \
-    autocutsel \
     libasound2 \
-    # === 关键修改：使用 Openbox 替代 XFCE ===
-    openbox tint2 pcmanfm lxterminal dbus-x11 libgtk-3-0 \
+    # 桌面环境 (精简版不需要 goodies)
+    xfce4 xfce4-terminal dbus-x11 libgtk-3-0 \
     # Python & 编译依赖
-    python3 python3-pip python3-dev python3-gi python3-xdg python3-websockify \
+    python3 python3-pip python3-venv python3-dev python3-gi python3-xdg python3-websockify \
     gir1.2-gtk-3.0 pkg-config gcc g++ make libffi-dev libssl-dev \
     # 杂项工具
     xautomation xdotool kdialog imagemagick nginx nodejs npm unzip p7zip-full \
     # AutoKey
     autokey-gtk \
-    # Chrome 依赖
+    # 浏览器依赖库
     libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxrandr2 \
     libpangocairo-1.0-0 libpango-1.0-0 libcups2 libdbus-1-3 libxdamage1 libxfixes3 \
     libgbm1 libdrm2 libwayland-client0 libatspi2.0-0 && \
     \
-    # 2. 安装 Chrome
-    wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
+    # 2. 清理不必要的包
+    apt-get purge -y xfce4-screensaver gnome-screensaver xscreensaver && \
+    rm -rf /usr/share/doc /usr/share/man /usr/share/info && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# ===================================================================
+# 安装 Google Chrome
+# ===================================================================
+RUN wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
+    apt-get update && \
     apt-get install -y /tmp/chrome.deb && \
     rm /tmp/chrome.deb && \
+    rm -rf /var/lib/apt/lists/* && \
+    # 配置启动脚本
     mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
     echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
     echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-gpu --no-default-browser-check --no-first-run "$@"' >> /usr/bin/google-chrome-stable && \
     chmod +x /usr/bin/google-chrome-stable && \
-    # 配置 Chrome 策略
+    # 配置策略
     mkdir -p /etc/opt/chrome/policies/managed && \
-    echo '{ "CommandLineFlagSecurityWarningsEnabled": false, "DefaultBrowserSettingEnabled": false }' > /etc/opt/chrome/policies/managed/managed_policies.json && \
-    \
-    # 3. Cloudflare Tunnel
-    wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
+    echo '{ "CommandLineFlagSecurityWarningsEnabled": false, "DefaultBrowserSettingEnabled": false }' > /etc/opt/chrome/policies/managed/managed_policies.json
+
+# 设置默认浏览器
+RUN update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/google-chrome-stable 200 && \
+    update-alternatives --set x-www-browser /usr/bin/google-chrome-stable
+
+# 配置 XDG 打开方式
+RUN mkdir -p /etc/xdg && \
+    { \
+        echo '[Default Applications]'; \
+        echo 'text/html=google-chrome.desktop'; \
+        echo 'x-scheme-handler/http=google-chrome.desktop'; \
+        echo 'x-scheme-handler/https=google-chrome.desktop'; \
+    } >> /etc/xdg/mimeapps.list
+
+# ===================================================================
+# 安装 Cloudflare Tunnel
+# ===================================================================
+RUN wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
     dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y && \
-    rm -f cloudflared-linux-amd64.deb && \
-    \
-    # 4. 系统配置
-    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
+    rm -f cloudflared-linux-amd64.deb
+
+# ===================================================================
+# 系统配置 & 用户目录
+# ===================================================================
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     locale-gen zh_CN.UTF-8 && update-locale LANG=zh_CN.UTF-8 && \
     groupadd -g 1001 headless && \
     useradd -u 1001 -g 1001 -m -s /bin/bash headless && \
     echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
-    \
-    # 5. 暴力清理 (卸载编译工具和不常用工具)
-    apt-get remove -y --purge gcc g++ make python3-dev && \
-    apt-get autoremove -y && \
-    # 删除 wget (如果不需要下载脚本)
-    # apt-get remove -y wget && \
-    rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/icons/Adwaita /usr/share/icons/HighContrast && \
-    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# ===================================================================
-# 配置 Openbox & VNC
-# ===================================================================
-# 预创建目录
-RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
+    mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
              /home/headless/.config/autokey/data/MyScripts \
              /home/headless/.config/autokey/data/My\ Phrases \
-             /home/headless/.config/openbox \
-             /home/headless/.config/tint2 \
-             /home/headless/.vnc && \
+             /home/headless/.local/share \
+             /home/headless/.config/autostart && \
     chown -R headless:headless /app /home/headless
 
-# 写入 Openbox 自启动配置 (替代 XFCE)
-# 解释：
-# 1. autocutsel -fork -selection PRIMARY: 同步鼠标选中内容
-# 2. autocutsel -fork -selection CLIPBOARD: 同步 Ctrl+C 内容
-# 3. tint2: 任务栏
-# 4. autokey: 自动化工具
-RUN echo 'autocutsel -fork -selection PRIMARY & \n\
-autocutsel -fork -selection CLIPBOARD & \n\
-tint2 & \n\
-pcmanfm --desktop --profile LXDE & \n\
-/usr/bin/autokey-gtk --verbose &' > /home/headless/.config/openbox/autostart && \
-    chown headless:headless /home/headless/.config/openbox/autostart
+# ===================================================================
+# 注入浏览器配置
+# ===================================================================
+COPY browser-configs/chrome.zip /tmp/chrome.zip
+RUN mkdir -p /home/headless/.config/google-chrome && \
+    unzip -q /tmp/chrome.zip -d /home/headless/.config/google-chrome/ && \
+    rm /tmp/chrome.zip && \
+    rm -f /home/headless/.config/google-chrome/SingletonLock && \
+    chown -R headless:headless /home/headless/.config
 
-# VNC xstartup (适配 Openbox)
+# ===================================================================
+# VNC 配置
+# ===================================================================
+RUN mkdir -p /home/headless/.vnc && chown headless:headless /home/headless/.vnc
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
 unset SESSION_MANAGER
@@ -136,64 +150,91 @@ eval $(dbus-launch --sh-syntax)
 export DBUS_SESSION_BUS_ADDRESS
 echo "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS'" > $HOME/.dbus-env
 chmod 644 $HOME/.dbus-env
-xsetroot -solid "#333333" &
+[ -r /etc/X11/Xresources ] && xrdb /etc/X11/Xresources
+[ -r "$HOME/.Xresources" ] && xrdb -merge "$HOME/.Xresources"
+xsetroot -solid grey &
 xset s off &
 xset -dpms &
 xset s noblank &
 export GTK_IM_MODULE=xim
+export QT_IM_MODULE=xim
 export XMODIFIERS=@im=none
 export LANG=zh_CN.UTF-8
-# 启动 Openbox
-exec /usr/bin/openbox-session
+export LANGUAGE=zh_CN:zh
+export LC_ALL=zh_CN.UTF-8
+export XDG_CONFIG_DIRS=/etc/xdg/xfce4:/etc/xdg
+export XDG_DATA_DIRS=/usr/local/share:/usr/share/xfce4:/usr/share
+export XDG_CURRENT_DESKTOP=XFCE
+export XDG_SESSION_DESKTOP=xfce
+exec /usr/bin/startxfce4
 EOF
 RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
 
-# ===================================================================
-# 安装 noVNC
-# ===================================================================
-WORKDIR /tmp
-RUN git clone --depth 1 https://github.com/novnc/noVNC.git /usr/share/novnc && \
-    git clone --depth 1 https://github.com/novnc/websockify /usr/share/novnc/utils/websockify && \
-    ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html && \
-    rm -rf /usr/share/novnc/.git
+RUN printf "[Desktop Entry]\nType=Application\nName=AutoKey\nExec=autokey-gtk\nTerminal=false\n" > /home/headless/.config/autostart/autokey.desktop && \
+    chown -R headless:headless /home/headless/.config
 
 # ===================================================================
-# Python 环境 (无 venv，直接安装到系统)
+# 安装 noVNC (修复：改用 wget，解决 git 127 报错)
 # ===================================================================
+WORKDIR /tmp
+RUN mkdir -p /usr/share/novnc && \
+    wget -qO- https://github.com/novnc/noVNC/archive/refs/tags/v1.4.0.tar.gz | tar xz --strip-components=1 -C /usr/share/novnc && \
+    mkdir -p /usr/share/novnc/utils/websockify && \
+    wget -qO- https://github.com/novnc/websockify/archive/refs/tags/v0.11.0.tar.gz | tar xz --strip-components=1 -C /usr/share/novnc/utils/websockify && \
+    ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html
+
+# ===================================================================
+# XFCE 电源管理
+# ===================================================================
+RUN mkdir -p /tmp/.X11-unix /tmp/.ICE-unix && \
+    chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix && \
+    echo "allowed_users=anybody" > /etc/X11/Xwrapper.config && \
+    mkdir -p /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml && \
+    chown -R headless:headless /home/headless/.config
+
+RUN cat << 'EOF' > /home/headless/.config/xfce4/xfconf/xfce-perchannel-xml/xfce4-power-manager.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<channel name="xfce4-power-manager" version="1.0">
+  <property name="xfce4-power-manager" type="empty">
+    <property name="blank-on-ac" type="int" value="0"/>
+    <property name="dpms-enabled" type="bool" value="false"/>
+    <property name="presentation-mode" type="bool" value="true"/>
+  </property>
+</channel>
+EOF
+
+# ===================================================================
+# Python 环境
+# ===================================================================
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 COPY web-app/requirements.txt /app/web-app/
-# 不再创建 venv，直接 pip install 到系统层
-RUN pip install --no-cache-dir --upgrade pip setuptools && \
+
+RUN mkdir -p /opt/playwright && \
+    pip install --no-cache-dir --upgrade pip wheel setuptools && \
     pip install --no-cache-dir -r /app/web-app/requirements.txt && \
-    # 再次清理 pip 缓存
+    # 瘦身：卸载编译工具
+    apt-get remove -y --purge gcc g++ make python3-dev && \
+    apt-get autoremove -y && \
+    apt-get clean && \
     rm -rf /root/.cache/pip
 
 # ===================================================================
-# 复制应用代码
+# 最终配置
 # ===================================================================
 COPY web-app/ /app/web-app/
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY scripts/ /app/scripts/
 COPY services.conf /etc/supervisor/conf.d/services.conf
-COPY browser-configs/chrome.zip /tmp/chrome.zip
 
-# 解压配置
-RUN mkdir -p /home/headless/.config/google-chrome && \
-    unzip -q /tmp/chrome.zip -d /home/headless/.config/google-chrome/ && \
-    rm /tmp/chrome.zip && \
-    rm -f /home/headless/.config/google-chrome/SingletonLock && \
-    chown -R headless:headless /home/headless/.config
-
-# DB 初始化脚本 (调整路径，因为没有 venv 了)
 RUN echo '#!/bin/bash' > /usr/local/bin/init-database && \
-    echo 'cd /app/web-app && python3 init_db.py' >> /usr/local/bin/init-database && \
+    echo 'cd /app/web-app && /opt/venv/bin/python3 init_db.py' >> /usr/local/bin/init-database && \
     chmod +x /usr/local/bin/init-database
 
-# 权限修正
-RUN chown -R headless:headless /app /home/headless \
+RUN chown -R headless:headless /app /home/headless /opt/venv \
     && chown -R www-data:www-data /var/log/nginx /var/lib/nginx 2>/dev/null || true \
-    && chmod +x /app/scripts/*.sh 2>/dev/null || true \
-    && mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
-    && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
+    && chmod +x /app/scripts/*.sh 2>/dev/null || true
 
 EXPOSE 5000
 WORKDIR /app
