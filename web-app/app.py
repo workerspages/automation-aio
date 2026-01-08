@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 # --- 目录配置 ---
 BASE_DIRS = {
     'downloads': Path(os.environ.get('SCRIPTS_DIR', '/home/headless/Downloads')),
-    'autokey': Path('/home/headless/.config/autokey/data/MyScripts')
+    'autokey': Path('/home/headless/.config/autokey/data/Sample Scripts')
 }
 
 for p in BASE_DIRS.values():
