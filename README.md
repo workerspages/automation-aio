@@ -50,7 +50,7 @@ version: '3.8'
 
 services:
   automation:
-    image: ghcr.io/your-repo/automation-aio:slim  # 或者 build: .
+    image: ghcr.io/workerspages/automation-aio:autokey
     container_name: automation-slim
     ports:
       - "5000:5000"
