@@ -3,14 +3,18 @@ import sys
 import json
 import logging
 import subprocess
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+
+# 引入 pytz 处理时区
 import pytz
 
 from flask import Flask, render_template, request, redirect, url_for, jsonify, flash, send_from_directory
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text, inspect
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -58,15 +62,19 @@ task_executor_pool = ThreadPoolExecutor(max_workers=5)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# --- 目录配置 ---
+# --- 目录配置 (关键修改：指向 Sample Scripts) ---
 BASE_DIRS = {
     'downloads': Path(os.environ.get('SCRIPTS_DIR', '/home/headless/Downloads')),
+    # AutoKey 默认加载目录是 Sample Scripts，我们必须用这个
     'autokey': Path('/home/headless/.config/autokey/data/Sample Scripts')
 }
 
+# 确保目录存在
 for p in BASE_DIRS.values():
-    try: p.mkdir(parents=True, exist_ok=True)
-    except: pass
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except:
+        pass
 
 # --- 数据库模型 ---
 class User(UserMixin, db.Model):
@@ -89,6 +97,7 @@ class Task(db.Model):
     last_run = db.Column(db.DateTime)
     last_status = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.now)
+    
     schedule_type = db.Column(db.String(20), default='cron') 
     random_start = db.Column(db.String(10), nullable=True)   
     random_end = db.Column(db.String(10), nullable=True)     
@@ -149,8 +158,10 @@ def list_files_api():
     files = []
     
     if not target_dir.exists():
-        try: target_dir.mkdir(parents=True, exist_ok=True)
-        except: return jsonify({'files': [], 'error': 'Directory not found'}), 404
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+        except:
+            return jsonify({'files': [], 'error': 'Directory not found'}), 404
 
     try:
         paths = sorted(target_dir.iterdir(), key=os.path.getmtime, reverse=True)
@@ -201,22 +212,35 @@ def save_file():
     
     file_path = target_dir / filename
     try:
+        # 1. 保存脚本文件
         file_path.write_text(content, encoding='utf-8')
-        # AutoKey JSON 自动生成
+        
+        # 2. [AutoKey 特殊处理] 自动生成 .json 定义文件
         if folder == 'autokey' and filename.endswith('.py'):
             json_path = file_path.with_suffix('.json')
             if not json_path.exists():
                 script_config = {
-                    "type": "script", "description": filename, "store": {}, "modes": [3],
-                    "usageCount": 0, "prompt": False, "omitTrigger": False, "showInTrayMenu": False,
-                    "filter": None, "hotkey": {"hotKey": None, "modifiers": []}
+                    "type": "script",
+                    "description": filename, # 这里保存的是完整文件名，例如 test.py
+                    "store": {},
+                    "modes": [3],
+                    "usageCount": 0,
+                    "prompt": False,
+                    "omitTrigger": False,
+                    "showInTrayMenu": False,
+                    "filter": None,
+                    "hotkey": {"hotKey": None, "modifiers": []}
                 }
                 json_path.write_text(json.dumps(script_config, indent=4), encoding='utf-8')
-                try: os.utime(str(BASE_DIRS['autokey']), None)
-                except: pass
+                # 尝试触发布局刷新
+                try:
+                    os.utime(str(BASE_DIRS['autokey']), None)
+                except:
+                    pass
 
         return jsonify({'success': True})
     except Exception as e:
+        logger.error(f"Save file error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/files', methods=['DELETE'])
@@ -235,7 +259,8 @@ def delete_file():
             os.remove(file_path)
             if folder == 'autokey':
                 json_path = file_path.with_suffix('.json')
-                if json_path.exists(): os.remove(json_path)
+                if json_path.exists():
+                    os.remove(json_path)
             return jsonify({'success': True})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
@@ -250,7 +275,7 @@ def list_scripts():
 
 def get_available_scripts():
     scripts = []
-    # 移除 .ascr 支持，仅保留 Python (.py) 和 Selenium (.side) 和 AutoKey
+    # 瘦身版仅支持 Python, Selenium Side, AutoKey
     supported_extensions = ['.side', '.py', '.autokey']
     
     for key, dir_path in BASE_DIRS.items():
@@ -266,6 +291,7 @@ def get_available_scripts():
                         scripts.append({'name': display_name, 'path': str(file)})
             except Exception as e:
                 logger.error(f"Error scanning dir {dir_path}: {e}")
+                
     return scripts
 
 @app.route('/api/tasks', methods=['GET', 'POST'])
@@ -282,7 +308,8 @@ def manage_tasks():
             try:
                 hour, minute = random_start.split(':')
                 cron_expression = f"{int(minute)} {int(hour)} * * *"
-            except: pass
+            except:
+                pass
 
         task = Task(
             name=data['name'],
@@ -295,19 +322,25 @@ def manage_tasks():
         )
         db.session.add(task)
         db.session.commit()
-        if task.enabled: schedule_task(task)
+        if task.enabled:
+            schedule_task(task)
         return jsonify({'success': True, 'task_id': task.id})
     
     tasks = Task.query.all()
-    return jsonify([{
-        'id': t.id, 'name': t.name, 'script_path': t.script_path,
-        'cron_expression': t.cron_expression, 'enabled': t.enabled,
-        'last_run': t.last_run.isoformat() if t.last_run else None,
-        'last_status': t.last_status,
-        'schedule_type': getattr(t, 'schedule_type', 'cron'),
-        'random_start': getattr(t, 'random_start', ''),
-        'random_end': getattr(t, 'random_end', '')
-    } for t in tasks])
+    return jsonify([
+        {
+            'id': t.id,
+            'name': t.name,
+            'script_path': t.script_path,
+            'cron_expression': t.cron_expression,
+            'enabled': t.enabled,
+            'last_run': t.last_run.isoformat() if t.last_run else None,
+            'last_status': t.last_status,
+            'schedule_type': getattr(t, 'schedule_type', 'cron'),
+            'random_start': getattr(t, 'random_start', ''),
+            'random_end': getattr(t, 'random_end', '')
+        } for t in tasks
+    ])
 
 @app.route('/api/tasks/<int:task_id>', methods=['GET', 'PUT', 'DELETE'])
 @login_required
@@ -317,8 +350,11 @@ def update_task(task_id):
     
     if request.method == 'GET':
         return jsonify({
-            'id': task.id, 'name': task.name, 'script_path': task.script_path,
-            'cron_expression': task.cron_expression, 'enabled': task.enabled,
+            'id': task.id,
+            'name': task.name,
+            'script_path': task.script_path,
+            'cron_expression': task.cron_expression,
+            'enabled': task.enabled,
             'last_run': task.last_run.isoformat() if task.last_run else None,
             'last_status': task.last_status,
             'schedule_type': getattr(task, 'schedule_type', 'cron'),
@@ -337,6 +373,7 @@ def update_task(task_id):
         data = request.json
         task.name = data.get('name', task.name)
         task.enabled = data.get('enabled', task.enabled)
+        
         schedule_type = data.get('schedule_type', 'cron')
         task.schedule_type = schedule_type
         
@@ -364,6 +401,7 @@ def update_task(task_id):
 def run_task_now(task_id):
     task = db.session.get(Task, task_id)
     if not task: return jsonify({'error': 'Task not found'}), 404
+    
     task_executor_pool.submit(run_task_with_context, app, task_id)
     return jsonify({'success': True, 'message': '任务已加入执行队列'})
 
@@ -381,35 +419,53 @@ def toggle_task(task_id):
     return jsonify({'success': True, 'enabled': task.enabled})
 
 # --- 执行逻辑 ---
+
 def run_task_with_context(app_instance, task_id):
+    print(f"🧵 Thread started for task {task_id}")
     try:
         with app_instance.app_context():
-            execute_script_core(task_id)
+            success = execute_script_core(task_id)
+            print(f"🧵 Thread finished for task {task_id}, Success: {success}")
     except Exception as e:
+        print(f"❌ Thread error: {e}")
         import traceback
         traceback.print_exc()
 
 def execute_script_core(task_id):
+    """
+    核心执行逻辑，需在 App Context 内调用
+    """
     task = db.session.get(Task, task_id)
-    if not task: return False
+    if not task:
+        print(f"❌ execute_script_core: Task {task_id} not found in DB")
+        return False
     
     print(f"🚀 Executing task: {task.name} ({task.script_path})")
+    
+    # 更新运行时间
     task.last_run = datetime.now(SYSTEM_TZ).replace(tzinfo=None)
     db.session.commit()
 
     script_path = task.script_path
+    
+    # 路径清理
     if script_path.startswith("[downloads] "): script_path = script_path.replace("[downloads] ", "", 1)
     if script_path.startswith("[autokey] "): script_path = script_path.replace("[autokey] ", "", 1)
     
     success = False
+    
     try:
+        # 优先识别 AutoKey (匹配 Sample Scripts)
         if 'autokey/data' in script_path or 'Sample Scripts' in script_path:
+             # === 关键修复：传递完整文件名 (含后缀) ===
              script_name = Path(script_path).name
-             print(f"🔄 Detected AutoKey script: {script_name}")
+             print(f"🔄 Detected AutoKey script by path: {script_name}")
              success = execute_autokey_script(script_name, task.name)
+             
         elif script_path.lower().endswith('.py'):
-            print(f"🐍 Running Python script: {script_path}")
+            print(f"🐍 Running as standard Python script: {script_path}")
             success = execute_python_script(task.name, script_path)
+            
         elif script_path.lower().endswith('.side'):
             success = execute_selenium_script(task.name, script_path)
         else:
@@ -419,6 +475,7 @@ def execute_script_core(task_id):
         task.last_status = 'Success' if success else 'Failed'
         db.session.commit()
         return success
+
     except Exception as e:
         logger.error(f"Execution Exception {task.name}: {e}")
         task.last_status = 'Error'
@@ -426,12 +483,19 @@ def execute_script_core(task_id):
         return False
 
 def execute_script(task_id):
-    with app.app_context(): execute_script_core(task_id)
+    with app.app_context():
+        execute_script_core(task_id)
 
 # --- 具体执行器 ---
+
 def get_desktop_env():
     env = os.environ.copy()
     env['DISPLAY'] = ':1'
+    env['HOME'] = '/home/headless'
+    env['USER'] = 'headless'
+    # 关键：确保 XAuthority 路径正确
+    env['XAUTHORITY'] = '/home/headless/.Xauthority'
+    
     dbus_file = Path('/home/headless/.dbus-env')
     if dbus_file.exists():
         try:
@@ -439,7 +503,9 @@ def get_desktop_env():
             if content.startswith('export '):
                 parts = content.replace('export ', '').split('=', 1)
                 if len(parts) == 2:
-                    env[parts[0].strip()] = parts[1].strip().strip("'").strip('"')
+                    key = parts[0].strip()
+                    value = parts[1].strip().strip("'").strip('"')
+                    env[key] = value
         except: pass
     return env
 
@@ -465,20 +531,25 @@ def execute_python_script(task_name, script_path):
     env = get_desktop_env()
     try:
         cmd = [sys.executable, script_path]
+        print(f"Running command: {cmd}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+        
         success = result.returncode == 0
         log_msg = (result.stdout + "\n" + result.stderr).strip() or "No output"
         
-        if success: logger.info(f"Python {task_name} Success")
+        if success: logger.info(f"Python {task_name} Success: {log_msg[:100]}...")
         else: logger.error(f"Python {task_name} Failed: {result.stderr}")
         
         script_type = "(Py)"
         try:
             with open(script_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read().lower()
-                if 'playwright' in content: script_type = "(Playwright)"
-                elif 'selenium' in content: script_type = "(Selenium)"
-        except: pass
+                if 'playwright' in content:
+                    script_type = "(Playwright)"
+                elif 'selenium' in content or 'webdriver' in content:
+                    script_type = "(Selenium)"
+        except:
+            pass
         
         from scripts.task_executor import send_telegram_notification, send_email_notification
         if bot_token and chat_id: send_telegram_notification(f"{task_name} {script_type}", success, log_msg, bot_token, chat_id)
@@ -488,25 +559,32 @@ def execute_python_script(task_name, script_path):
         logger.error(f"Python Exception: {e}")
         return False
 
-def execute_autokey_script(script_stem, task_name):
+def execute_autokey_script(script_name, task_name):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
-    try:
-        cmd = ['autokey-run', '-s', script_stem]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
-        success = result.returncode == 0
-        log_msg = (result.stdout + "\n" + result.stderr).strip() or "Command Sent"
-        
-        if success: logger.info(f"AutoKey {script_stem} Success")
-        else: logger.error(f"AutoKey Failed: {result.stderr}")
-        
-        from scripts.task_executor import send_telegram_notification, send_email_notification
-        if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", success, log_msg, bot_token, chat_id)
-        send_email_notification(f"{task_name} (AutoKey)", success, log_msg)
-        return success
-    except Exception as e:
-        logger.error(f"AutoKey Error: {e}")
-        return False
+    
+    # 策略 1: 尝试完整文件名 (例如 test_browser.py)
+    cmd = ['autokey-run', '-s', script_name]
+    print(f"Running AutoKey (Try 1): {cmd}")
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+    
+    # 策略 2: 如果失败，尝试去掉后缀 (例如 test_browser)
+    if result.returncode != 0 and script_name.endswith('.py'):
+        stem = Path(script_name).stem
+        cmd_retry = ['autokey-run', '-s', stem]
+        print(f"Running AutoKey (Try 2): {cmd_retry}")
+        result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=300, env=env)
+
+    success = result.returncode == 0
+    log_msg = (result.stdout + "\n" + result.stderr).strip() or "Command Sent"
+    
+    if success: logger.info(f"AutoKey {script_name} Success")
+    else: logger.error(f"AutoKey Failed: {result.stderr}")
+    
+    from scripts.task_executor import send_telegram_notification, send_email_notification
+    if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", success, log_msg, bot_token, chat_id)
+    send_email_notification(f"{task_name} (AutoKey)", success, log_msg)
+    return success
 
 def schedule_task(task):
     if task.enabled:
@@ -516,19 +594,39 @@ def schedule_task(task):
                 try:
                     start_h, start_m = map(int, task.random_start.split(':'))
                     end_h, end_m = map(int, task.random_end.split(':'))
+                    
                     now = datetime.now(SYSTEM_TZ)
                     start_dt = now.replace(hour=start_h, minute=start_m, second=0, microsecond=0)
                     end_dt = now.replace(hour=end_h, minute=end_m, second=0, microsecond=0)
-                    if end_dt < start_dt: end_dt += timedelta(days=1)
+                    
+                    if end_dt < start_dt:
+                        end_dt += timedelta(days=1)
+                    
                     diff_seconds = int((end_dt - start_dt).total_seconds())
                     if diff_seconds < 60: diff_seconds = 60
-                    trigger = CronTrigger(hour=start_h, minute=start_m, jitter=diff_seconds, timezone=SYSTEM_TZ)
-                except: trigger = CronTrigger.from_crontab(task.cron_expression, timezone=SYSTEM_TZ)
+                    
+                    trigger = CronTrigger(
+                        hour=start_h, 
+                        minute=start_m, 
+                        jitter=diff_seconds, 
+                        timezone=SYSTEM_TZ
+                    )
+                    logger.info(f"Task {task.name}: Random schedule {task.random_start}-{task.random_end} (window: {diff_seconds}s)")
+                except Exception as e:
+                    logger.error(f"Random schedule parse error for {task.name}: {e}")
+                    trigger = CronTrigger.from_crontab(task.cron_expression, timezone=SYSTEM_TZ)
             else:
                 trigger = CronTrigger.from_crontab(task.cron_expression, timezone=SYSTEM_TZ)
             
             if trigger:
-                scheduler.add_job(func=execute_script, trigger=trigger, id=f'task_{task.id}', args=[task.id], replace_existing=True)
+                job = scheduler.add_job(
+                    func=execute_script,
+                    trigger=trigger,
+                    id=f'task_{task.id}',
+                    args=[task.id],
+                    replace_existing=True
+                )
+                logger.info(f'✅ Task {task.name} scheduled. Next run range: {job.next_run_time}')
         except Exception as e:
             logger.error(f'Schedule failed for {task.name}: {e}')
 
@@ -541,8 +639,12 @@ def initialize_system():
                 user.set_password(os.environ.get('ADMIN_PASSWORD', 'admin123'))
                 db.session.add(user)
                 db.session.commit()
-            for task in Task.query.filter_by(enabled=True).all(): schedule_task(task)
-        except Exception as e: print(f"Init error: {e}")
+            
+            tasks = Task.query.filter_by(enabled=True).all()
+            for task in tasks:
+                schedule_task(task)
+        except Exception as e:
+            print(f"Init error: {e}")
 
 initialize_system()
 
