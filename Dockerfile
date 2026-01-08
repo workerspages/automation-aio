@@ -44,18 +44,18 @@ ENV TZ=Asia/Shanghai \
 # 系统安装 (核心层)
 # ===================================================================
 RUN apt-get update && \
-    # 1. 安装核心工具 (包含 wget, curl, git, ca-certificates)
+    # 1. 安装核心工具
     apt-get install -y --no-install-recommends \
     wget curl ca-certificates git \
     vim nano sudo tzdata locales net-tools openssh-client \
     iproute2 iputils-ping supervisor cron sqlite3 \
-    # 2. 字体 (仅保留微米黑)
+    # 2. 字体
     fonts-wqy-microhei language-pack-zh-hans \
     # 3. X11 / VNC / Audio
     x11-utils x11-xserver-utils xauth xserver-xorg-core xserver-xorg-video-dummy \
     tigervnc-standalone-server tigervnc-common tigervnc-tools \
     libasound2 \
-    # 4. Openbox 桌面环境 (替代 XFCE)
+    # 4. Openbox 桌面环境
     openbox tint2 pcmanfm lxterminal dbus-x11 libgtk-3-0 \
     # 5. 剪贴板同步工具
     autocutsel \
@@ -110,7 +110,7 @@ RUN apt-get update && \
     echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
     \
     # ============================================
-    # 瘦身清理 (卸载编译工具)
+    # 瘦身清理
     # ============================================
     apt-get remove -y --purge gcc g++ make python3-dev && \
     apt-get autoremove -y && \
@@ -120,7 +120,6 @@ RUN apt-get update && \
 # ===================================================================
 # 配置 Openbox (替代 XFCE)
 # ===================================================================
-# 预创建所有必要目录
 RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
              /home/headless/.config/autokey/data/MyScripts \
              /home/headless/.config/autokey/data/My\ Phrases \
@@ -129,7 +128,7 @@ RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downlo
              /home/headless/.vnc && \
     chown -R headless:headless /app /home/headless
 
-# === 新增：强制 Tint2 任务栏在屏幕顶部 (适配坐标脚本) ===
+# === 强制 Tint2 任务栏在屏幕顶部 ===
 RUN echo 'panel_position = top center horizontal\n\
 panel_size = 100% 30\n\
 panel_layer = top\n\
@@ -156,7 +155,7 @@ clock_padding = 4 2\n\
 clock_background_id = 0' > /home/headless/.config/tint2/tint2rc && \
     chown -R headless:headless /home/headless/.config/tint2
 
-# === 新增：自定义 Openbox 右键菜单 (menu.xml) ===
+# === 自定义 Openbox 右键菜单 (menu.xml) ===
 RUN cat << 'EOF' > /home/headless/.config/openbox/menu.xml
 <?xml version="1.0" encoding="UTF-8"?>
 <openbox_menu xmlns="http://openbox.org/3.4/menu">
@@ -191,15 +190,15 @@ RUN cat << 'EOF' > /home/headless/.config/openbox/menu.xml
 EOF
 RUN chown headless:headless /home/headless/.config/openbox/menu.xml
 
-# 写入 Openbox 自动启动脚本 (AutoKey, 剪贴板, 任务栏)
+# === 关键修改：Openbox 自动启动脚本 ===
+# 移除了 'pcmanfm --desktop'，防止它遮挡 Openbox 的右键菜单
 RUN echo 'autocutsel -fork -selection PRIMARY & \n\
 autocutsel -fork -selection CLIPBOARD & \n\
 tint2 & \n\
-pcmanfm --desktop --profile LXDE & \n\
 /usr/bin/autokey-gtk --verbose &' > /home/headless/.config/openbox/autostart && \
     chown headless:headless /home/headless/.config/openbox/autostart
 
-# VNC 启动脚本 (适配 Openbox)
+# VNC 启动脚本
 RUN cat << 'EOF' > /home/headless/.vnc/xstartup
 #!/bin/sh
 unset SESSION_MANAGER
@@ -208,6 +207,7 @@ eval $(dbus-launch --sh-syntax)
 export DBUS_SESSION_BUS_ADDRESS
 echo "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS'" > $HOME/.dbus-env
 chmod 644 $HOME/.dbus-env
+# 纯色背景 (因为我们去掉了 pcmanfm --desktop，所以需要手动设置背景)
 xsetroot -solid "#333333" &
 xset s off &
 xset -dpms &
@@ -220,7 +220,7 @@ EOF
 RUN chmod +x /home/headless/.vnc/xstartup && chown headless:headless /home/headless/.vnc/xstartup
 
 # ===================================================================
-# 安装 noVNC (wget + tar，避免 git 报错)
+# 安装 noVNC
 # ===================================================================
 WORKDIR /tmp
 RUN mkdir -p /usr/share/novnc && \
@@ -228,7 +228,6 @@ RUN mkdir -p /usr/share/novnc && \
     mkdir -p /usr/share/novnc/utils/websockify && \
     wget -qO- https://github.com/novnc/websockify/archive/refs/tags/v0.11.0.tar.gz | tar xz --strip-components=1 -C /usr/share/novnc/utils/websockify && \
     ln -s /usr/share/novnc/vnc.html /usr/share/novnc/index.html && \
-    # 修正权限，解决 404 问题
     chown -R headless:headless /usr/share/novnc && \
     chmod -R 755 /usr/share/novnc
 
