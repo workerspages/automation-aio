@@ -211,8 +211,14 @@ RUN groupadd -g 1001 headless && \
     useradd -u 1001 -g 1001 -m -s /bin/bash headless && \
     echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
-RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads && \
-    chown -R headless:headless /app /home/headless
+RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads
+RUN mkdir -p /home/headless/.config/autokey/data/MyScripts \
+    /home/headless/.config/autokey/data/My\ Phrases \
+    /home/headless/.local/share \
+    /home/headless/.config/autostart
+
+# 统一设置权限 (确保上面创建的所有目录都归 headless 所有)
+RUN chown -R headless:headless /app /home/headless
 
 # ===================================================================
 # +++ 新增：注入浏览器个人配置 (Zip版) +++
