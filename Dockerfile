@@ -9,6 +9,7 @@ USER root
 
 # 环境变量配置
 ENV TZ=Asia/Shanghai \
+    HOME=/home/headless \
     LANG=zh_CN.UTF-8 \
     LANGUAGE=zh_CN:zh \
     LC_ALL=zh_CN.UTF-8 \
