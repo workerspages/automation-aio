@@ -54,6 +54,7 @@ RUN apt-get update && \
     # X11 / VNC / Audio
     x11-utils x11-xserver-utils xauth xserver-xorg-core xserver-xorg-video-dummy \
     tigervnc-standalone-server tigervnc-common tigervnc-tools \
+    autocutsel \
     libasound2 \
     # === 关键修改：使用 Openbox 替代 XFCE ===
     openbox tint2 pcmanfm lxterminal dbus-x11 libgtk-3-0 \
