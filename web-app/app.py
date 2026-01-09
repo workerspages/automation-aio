@@ -237,11 +237,8 @@ def save_file():
                     "hotkey": {"hotKey": None, "modifiers": []}
                 }
                 json_path.write_text(json.dumps(script_config, indent=4), encoding='utf-8')
-                # 尝试触发布局刷新
-                try:
-                    os.utime(str(BASE_DIRS['autokey']), None)
-                except:
-                    pass
+                # 触发 AutoKey 重载
+                reload_autokey()
 
         return jsonify({'success': True})
     except Exception as e:
@@ -266,6 +263,7 @@ def delete_file():
                 json_path = file_path.with_suffix('.json')
                 if json_path.exists():
                     os.remove(json_path)
+                reload_autokey()
             return jsonify({'success': True})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
@@ -597,14 +595,31 @@ def execute_autokey_script(script_name, task_name):
 
     success = result.returncode == 0
     log_msg = (result.stdout + "\n" + result.stderr).strip() or "Command Sent"
-    
-    if success: logger.info(f"AutoKey {script_name} Success")
     else: logger.error(f"AutoKey Failed: {result.stderr}")
     
     from scripts.task_executor import send_telegram_notification, send_email_notification
     if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", success, log_msg, bot_token, chat_id)
     send_email_notification(f"{task_name} (AutoKey)", success, log_msg)
     return success
+
+def reload_autokey():
+    """强制重启 AutoKey 以加载新脚本"""
+    try:
+        logger.info("♻️ Reloading AutoKey...")
+        # 1. Kill existing
+        subprocess.run(['pkill', '-f', 'autokey'], capture_output=True)
+        time.sleep(0.5)
+        
+        # 2. Restart (headless environment)
+        env = get_desktop_env()
+        subprocess.Popen(['autokey-gtk', '--verbose'], 
+                         env=env,
+                         stdout=subprocess.DEVNULL, 
+                         stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+        logger.info("✅ AutoKey restarted")
+    except Exception as e:
+        logger.error(f"❌ Failed to reload AutoKey: {e}")
 
 def schedule_task(task):
     if task.enabled:
