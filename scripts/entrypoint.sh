@@ -32,14 +32,25 @@ python3 init_db.py
 
 # 5. Cloudflare
 CF_ENABLE=$(echo "${ENABLE_CLOUDFLARE_TUNNEL}" | tr '[:upper:]' '[:lower:]')
-if [ "$CF_ENABLE" == "true" ] && [ -n "${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
+if [ "$CF_ENABLE" == "true" ]; then
+    CMD=""
+    if [ -n "${CLOUDFLARE_TUNNEL_TOKEN}" ]; then
+        echo "☁️ Cloudflare Tunnel: Token Mode (Remote Management)"
+        CMD="/usr/bin/cloudflared tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}"
+    else
+        echo "☁️ Cloudflare Tunnel: Quick Tunnel Mode (Random Domain)"
+        CMD="/usr/bin/cloudflared tunnel --url http://localhost:5000"
+    fi
+
     cat << EOF >> /etc/supervisor/conf.d/services.conf
 [program:cloudflared]
-command=/usr/bin/cloudflared tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+command=${CMD}
 autostart=true
 autorestart=true
 user=root
 priority=60
+stdout_logfile=/app/logs/cloudflared.log
+stderr_logfile=/app/logs/cloudflared-error.log
 EOF
 fi
 

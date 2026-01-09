@@ -35,7 +35,17 @@ services:
       - EMAIL_TO=receiver@example.com
       
       - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=xxxxxxxxx
+      
+      # === Cloudflare Tunnel 配置 ===
+      # 模式 A: Token (推荐 - 固定域名)
+      # 1. 在 Cloudflare 面板创建 Tunnel，获取 Token。
+      # 2. 在 Cloudflare 面板配置 Public Hostname (例如: app.example.com -> http://localhost:5000)
+      - CLOUDFLARE_TUNNEL_TOKEN=
+      
+      # 模式 B: Quick Tunnel (测试用 - 随机域名)
+      # 1. 设置 ENABLE_CLOUDFLARE_TUNNEL=true
+      # 2. 留空 CLOUDFLARE_TUNNEL_TOKEN
+      # 3. 启动后查看日志获取随机域名 (例如: https://random-name.trycloudflare.com)
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
