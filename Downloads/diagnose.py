@@ -60,6 +60,27 @@ def main():
         log("Checking Xorg processes:")
         run_command(['ps', 'aux'])
 
+    # 3.1 检查 AutoKey 目录权限
+    log("Checking AutoKey Directory Permissions...")
+    ak_path = '/home/headless/.config/autokey/data/Sample Scripts'
+    if os.path.exists(ak_path):
+        stat = os.stat(ak_path)
+        import pwd
+        try:
+            owner = pwd.getpwuid(stat.st_uid).pw_name
+        except:
+            owner = str(stat.st_uid)
+        log(f"Path: {ak_path}")
+        log(f"Owner: {owner} (UID: {stat.st_uid})")
+        log(f"Mode: {oct(stat.st_mode)}")
+        
+        if owner == 'root':
+            log("❌ CRITICAL: Directory is owned by root! Script saving will fail.")
+        else:
+             log("✅ Directory ownership looks correct.")
+    else:
+        log(f"❌ Directory not found: {ak_path}")
+
     # 4. 检查 Python GUI 库 (Tkinter)
     log("Checking Tkinter support...")
     try:
