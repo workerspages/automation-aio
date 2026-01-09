@@ -232,6 +232,8 @@ if __name__ == '__main__':
 
     if tg_token and tg_chat_id:
         send_telegram_notification(Path(sys.argv[1]).name, success, msg, tg_token, tg_chat_id)
+    else:
+        logger.warning("⚠️ Telegram notification skipped: No token/chat_id provided in args or environment.")
     
     send_email_notification(Path(sys.argv[1]).name, success, msg)
     sys.exit(0 if success else 1)

@@ -70,8 +70,8 @@ logger = logging.getLogger(__name__)
 # --- 目录配置 (关键修改：指向 Sample Scripts) ---
 BASE_DIRS = {
     'downloads': Path(os.environ.get('SCRIPTS_DIR', '/home/headless/Downloads')),
-    # AutoKey 默认加载目录是 Sample Scripts，我们必须用这个
-    'autokey': Path('/home/headless/.config/autokey/data/Sample Scripts')
+    # AutoKey 脚本存放目录：MyScripts
+    'autokey': Path('/home/headless/.config/autokey/data/MyScripts')
 }
 
 # 确保目录存在
@@ -462,7 +462,7 @@ def execute_script_core(task_id):
         script_path = str(BASE_DIRS['autokey'] / filename)
     
     # 检查文件是否存在
-    if not os.path.exists(script_path) and not ('autokey/data' in script_path or 'Sample Scripts' in script_path):
+    if not os.path.exists(script_path) and not ('autokey/data' in script_path or 'MyScripts' in script_path):
          # AutoKey 脚本可能只是目录或逻辑名，先不强制检查物理路径，但在 try block 里会处理
          # 这里主要拦截 Python/Side 脚本
          logger.error(f"❌ Script file not found: {script_path} (Original: {original_path})")
@@ -473,8 +473,8 @@ def execute_script_core(task_id):
     success = False
     
     try:
-        # 优先识别 AutoKey (匹配 Sample Scripts)
-        if 'autokey/data' in script_path or 'Sample Scripts' in script_path:
+        # 优先识别 AutoKey (匹配 MyScripts 或 autokey/data)
+        if 'autokey/data' in script_path or 'MyScripts' in script_path:
              # === 关键修复：传递完整文件名 (含后缀) ===
              script_name = Path(script_path).name
              print(f"🔄 Detected AutoKey script by path: {script_name}")

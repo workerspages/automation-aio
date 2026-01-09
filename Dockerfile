@@ -123,6 +123,7 @@ RUN apt-get update && \
 RUN mkdir -p /app/web-app /app/scripts /app/data /app/logs /home/headless/Downloads \
   /home/headless/.config/autokey/data/Sample\ Scripts \
   /home/headless/.config/autokey/data/My\ Phrases \
+  /home/headless/.config/autokey/data/MyScripts \
   /home/headless/.config/openbox \
   /home/headless/.config/tint2 \
   /home/headless/.vnc && \
