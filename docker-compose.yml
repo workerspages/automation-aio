@@ -13,7 +13,8 @@ services:
       - ADMIN_PASSWORD=admin123
 
       # === 数据库配置 (可选：连接外部 MariaDB) ===
-      # 如果留空或注释，默认使用容器内置的 SQLite
+      # --- 数据库 (可选，留空默认使用内置 SQLite) ---
+      # 如需外接 MariaDB/MySQL，请填写以下变量:
       - MARIADB_HOST= # 例如: 192.168.1.100
       - MARIADB_PORT=3306
       - MARIADB_USER=root
