@@ -581,6 +581,14 @@ def execute_autokey_script(script_name, task_name):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
     
+    # === 日志捕获改进 (Start) ===
+    # 记录当前日志位置
+    start_pos = 0
+    try:
+        if os.path.exists('/app/logs/autokey.log'):
+            start_pos = os.path.getsize('/app/logs/autokey.log')
+    except: pass
+    
     # 策略 1: 尝试完整文件名 (例如 test_browser.py)
     cmd = ['autokey-run', '-s', script_name]
     print(f"Running AutoKey (Try 1): {cmd}")
@@ -594,7 +602,21 @@ def execute_autokey_script(script_name, task_name):
         result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=300, env=env)
 
     success = result.returncode == 0
-    log_msg = (result.stdout + "\n" + result.stderr).strip() or "Command Sent"
+    
+    # === 日志捕获改进 (End) ===
+    # 等待异步脚本输出 (Hack)
+    if success:
+        time.sleep(2) # 等待脚本可能的输出
+        try:
+            with open('/app/logs/autokey.log', 'r') as f:
+                f.seek(start_pos)
+                new_logs = f.read()
+                if new_logs.strip():
+                    log_msg += f"\n\n--- 脚本输出 (Snapshot) ---\n{new_logs}"
+        except Exception as e:
+            logger.error(f"Failed to read autokey logs: {e}")
+
+    log_msg = log_msg.strip()
     if success: logger.info(f"AutoKey {script_name} Success")
     else: logger.error(f"AutoKey Failed: {result.stderr}")
     
@@ -614,10 +636,14 @@ def reload_autokey():
         
         # 2. Restart (headless environment)
         env = get_desktop_env()
+        
+        # redirect autokey output to log file
+        log_file = open('/app/logs/autokey.log', 'a')
+        
         pro = subprocess.Popen(['autokey-gtk', '--verbose'], 
                          env=env,
-                         stdout=subprocess.DEVNULL, 
-                         stderr=subprocess.DEVNULL,
+                         stdout=log_file, 
+                         stderr=log_file,
                          start_new_session=True)
         
         # 3. Wait for DBus service polling
