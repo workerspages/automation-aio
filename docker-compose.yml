@@ -7,10 +7,14 @@ services:
     ports:
       - "5000:5000"
     environment:
+      - VNC_RESOLUTION=1360x768               # 远程桌面分辨率
+      - TZ=Asia/Shanghai                      # 容器时区
       - VNC_PW=admin
       - SECRET_KEY=your-secret-key-change-this
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin123
+      - DISPLAY=:1                            # 显示面画在编号为 1 的虚拟显示器上 (请误修改)
+      - MAX_SCRIPT_TIMEOUT=600                # 全局环境变量-如果你代码里的 sleep 时间超过了 300 秒，Flask 后端会认为任务卡死
 
       # === 数据库配置 (可选：连接外部 MariaDB) ===
       # --- 数据库 (可选，留空默认使用内置 SQLite) ---
@@ -22,11 +26,12 @@ services:
       - MARIADB_DB=automation_aio
       # =======================================
 
-      # Telegram 通知配置
+      # === Telegram 通知配置 ===
       - TELEGRAM_BOT_TOKEN=
       - TELEGRAM_CHAT_ID=
 
       # === 邮件通知配置 ===
+       # 开启邮件通知:true   关闭邮件通知:false 
       - ENABLE_EMAIL_NOTIFY=true
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=587
@@ -35,24 +40,11 @@ services:
       - EMAIL_FROM=your_email@gmail.com
       - EMAIL_TO=receiver@example.com
 
-      - ENABLE_CLOUDFLARE_TUNNEL=false
-
       # === Cloudflare Tunnel 配置 ===
-      # 模式 A: Token (推荐 - 固定域名)
-      # 1. 在 Cloudflare 面板创建 Tunnel，获取 Token。
-      # 2. 在 Cloudflare 面板配置 Public Hostname (例如: app.example.com -> http://localhost:5000)
-      - CLOUDFLARE_TUNNEL_TOKEN=
-
-      # 模式 B: Quick Tunnel (测试用 - 随机域名)
-      # 1. 设置 ENABLE_CLOUDFLARE_TUNNEL=true
-      # 2. 留空 CLOUDFLARE_TUNNEL_TOKEN
-      # 3. 启动后查看日志获取随机域名 (例如: https://random-name.trycloudflare.com)
-
-      # === 应用公网域名 (可选) ===
-      # 用于在通知(邮件/Telegram)中生成正确的访问链接
-      - APP_PUBLIC_DOMAIN=
-
-      - DISPLAY=:1
+      # 必须提供 Token，否则脚本会报错并跳过启动  开启:true 关闭:false 
+      - ENABLE_CLOUDFLARE_TUNNEL=false
+      - CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+      - APP_PUBLIC_DOMAIN=                     # Cloudflare Tunnel后台配置的域名
     volumes:
       - ./Downloads:/home/headless/Downloads
       - ./data:/app/data
