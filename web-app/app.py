@@ -580,6 +580,7 @@ def execute_python_script(task_name, script_path):
 def execute_autokey_script(script_name, task_name):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
+    log_msg = ""
     
     # === 日志捕获改进 (Start) ===
     # 记录当前日志位置
