@@ -9,7 +9,7 @@ function toggleScheduleInputs() {
 
     const typeRadio = document.querySelector('input[name="scheduleType"]:checked');
     const type = typeRadio ? typeRadio.value : 'cron';
-    
+
     const randomGroup = document.getElementById('randomInputGroup');
     const cronInput = document.getElementById('cronExpression');
     const startInput = document.getElementById('randomStart');
@@ -35,12 +35,33 @@ function openAddModal() {
     document.getElementById('modalTitle').textContent = '添加任务';
     document.getElementById('taskForm').reset();
     document.getElementById('taskId').value = '';
-    
+
     const cronRadio = document.querySelector('input[name="scheduleType"][value="cron"]');
     if (cronRadio) cronRadio.checked = true;
     toggleScheduleInputs();
 
-    document.getElementById('taskModal').style.display = 'block';
+    updateScriptOptions().then(() => {
+        document.getElementById('taskModal').style.display = 'block';
+    });
+}
+
+function updateScriptOptions(selectedValue = null) {
+    return fetch('/api/scripts')
+        .then(r => r.json())
+        .then(scripts => {
+            const select = document.getElementById('scriptPath');
+            select.innerHTML = '<option value="">-- 选择脚本 --</option>';
+            scripts.forEach(script => {
+                const option = document.createElement('option');
+                option.value = script.path;
+                option.textContent = script.name;
+                if (selectedValue && script.path === selectedValue) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+        })
+        .catch(e => console.error('Failed to load scripts:', e));
 }
 
 function editTask(taskId) {
@@ -52,8 +73,11 @@ function editTask(taskId) {
         .then(task => {
             document.getElementById('taskId').value = task.id;
             document.getElementById('taskName').value = task.name;
+
+            // 动态加载脚本列表并回显
+            updateScriptOptions(task.script_path);
             document.getElementById('scriptPath').value = task.script_path;
-            
+
             const scheduleType = task.schedule_type || 'cron';
             const radio = document.querySelector(`input[name="scheduleType"][value="${scheduleType}"]`);
             if (radio) radio.checked = true;
@@ -82,7 +106,7 @@ function saveTask(event) {
     const taskId = document.getElementById('taskId').value;
     const scheduleTypeRadio = document.querySelector('input[name="scheduleType"]:checked');
     const scheduleType = scheduleTypeRadio ? scheduleTypeRadio.value : 'cron';
-    
+
     const data = {
         name: document.getElementById('taskName').value,
         script_path: document.getElementById('scriptPath').value,
@@ -93,7 +117,7 @@ function saveTask(event) {
     if (scheduleType === 'random') {
         data.random_start = document.getElementById('randomStart').value;
         data.random_end = document.getElementById('randomEnd').value;
-        data.cron_expression = ""; 
+        data.cron_expression = "";
     } else {
         data.cron_expression = document.getElementById('cronExpression').value;
     }
@@ -106,16 +130,16 @@ function saveTask(event) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
-    .then(response => response.json())
-    .then(result => {
-        if (result.success) {
-            closeModal('taskModal');
-            location.reload();
-        } else {
-            alert('保存失败: ' + (result.error || '未知错误'));
-        }
-    })
-    .catch(error => alert('保存失败: ' + error));
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                closeModal('taskModal');
+                location.reload();
+            } else {
+                alert('保存失败: ' + (result.error || '未知错误'));
+            }
+        })
+        .catch(error => alert('保存失败: ' + error));
 }
 
 // --- 任务操作 ---
@@ -176,7 +200,7 @@ function updateCronHelp(expression) {
 
 function openFileManager() {
     currentFolder = 'downloads';
-    switchFolder('downloads'); 
+    switchFolder('downloads');
     document.getElementById('fileManagerModal').style.display = 'block';
 }
 
@@ -184,9 +208,9 @@ function switchFolder(folder) {
     currentFolder = folder;
     document.querySelectorAll('.folder-tab').forEach(el => el.classList.remove('active'));
     document.getElementById(`tab-${folder}`).classList.add('active');
-    
-    const pathHint = folder === 'autokey' 
-        ? '正在查看: AutoKey 脚本 (系统级)' 
+
+    const pathHint = folder === 'autokey'
+        ? '正在查看: AutoKey 脚本 (系统级)'
         : '正在查看: 常规脚本 (Selenium/Python)';
     document.getElementById('current-path-hint').textContent = pathHint;
 
@@ -204,14 +228,14 @@ function loadFiles(folder) {
                 container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;">暂无文件</div>';
                 return;
             }
-            
+
             let html = '';
             data.files.forEach(file => {
                 html += `
                 <div class="file-item">
                     <div class="file-info">
                         <span class="file-name">${file.name}</span>
-                        <span class="file-meta">${file.modified} · ${(file.size/1024).toFixed(1)} KB</span>
+                        <span class="file-meta">${file.modified} · ${(file.size / 1024).toFixed(1)} KB</span>
                     </div>
                     <div class="file-actions">
                         <button class="btn-secondary" style="padding:4px 10px;font-size:0.8em;" onclick="openEditor('${file.name}', '${folder}')">✎ 编辑</button>
@@ -232,17 +256,17 @@ function createNewScript() {
 
 function deleteScript(filename, folder) {
     if (!confirm(`确定要删除 ${filename} 吗？`)) return;
-    
+
     fetch(`/api/files?folder=${folder}&filename=${encodeURIComponent(filename)}`, { method: 'DELETE' })
-    .then(r => r.json())
-    .then(res => {
-        if (res.success) loadFiles(folder);
-        else alert('删除失败: ' + res.error);
-    });
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) loadFiles(folder);
+            else alert('删除失败: ' + res.error);
+        });
 }
 
 function initCodeMirror() {
-    if (editorInstance) return; 
+    if (editorInstance) return;
     const textarea = document.getElementById('codeEditor');
     editorInstance = CodeMirror.fromTextArea(textarea, {
         mode: 'python',
@@ -255,15 +279,15 @@ function initCodeMirror() {
 
 function openEditor(filename, folder) {
     document.getElementById('editorFolder').value = folder;
-    document.getElementById('editorFilename').value = filename; 
-    
+    document.getElementById('editorFilename').value = filename;
+
     const nameDisplay = document.getElementById('editorFilenameDisplay');
     nameDisplay.value = filename;
-    nameDisplay.disabled = !!filename; 
-    
+    nameDisplay.disabled = !!filename;
+
     document.getElementById('editorTitle').textContent = filename ? '编辑脚本' : '新建脚本';
     document.getElementById('editorModal').style.display = 'block';
-    
+
     setTimeout(() => {
         initCodeMirror();
         if (filename) {
@@ -295,7 +319,7 @@ function saveScriptContent() {
         alert('请输入文件名');
         return;
     }
-    
+
     // === 关键修改：只保留 .py 和 .side 的自动补全 ===
     if (!filename.endsWith('.py') && !filename.endsWith('.side')) {
         filename += '.py';
@@ -310,19 +334,19 @@ function saveScriptContent() {
             content: content
         })
     })
-    .then(r => r.json())
-    .then(res => {
-        if (res.success) {
-            alert('保存成功!');
-            closeModal('editorModal');
-            if (document.getElementById('fileManagerModal').style.display === 'block') {
-                loadFiles(folder);
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) {
+                alert('保存成功!');
+                closeModal('editorModal');
+                if (document.getElementById('fileManagerModal').style.display === 'block') {
+                    loadFiles(folder);
+                }
+            } else {
+                alert('保存失败: ' + res.error);
             }
-        } else {
-            alert('保存失败: ' + res.error);
-        }
-    })
-    .catch(e => alert('请求错误: ' + e));
+        })
+        .catch(e => alert('请求错误: ' + e));
 }
 
 function closeModal(modalId) {
@@ -330,16 +354,16 @@ function closeModal(modalId) {
     if (modalId === 'taskModal') currentTaskId = null;
 }
 
-window.onclick = function(event) {
+window.onclick = function (event) {
     if (event.target.classList.contains('modal')) {
         event.target.style.display = 'none';
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const cronInput = document.getElementById('cronExpression');
     if (cronInput) {
-        cronInput.addEventListener('input', function() {
+        cronInput.addEventListener('input', function () {
             updateCronHelp(this.value);
         });
     }
