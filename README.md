@@ -53,8 +53,8 @@
 在你的服务器上执行：
 
 ```bash
-mkdir -p automation-slim/data automation-slim/logs automation-slim/Downloads
-cd automation-slim
+mkdir -p automation-aio/data automation-aio/logs automation-aio/Downloads
+cd automation-aio
 ```
 
 ### 2. 创建配置文件
@@ -261,7 +261,7 @@ A: 在 Web 面板的任务卡片上，会显示最后一次运行的状态。你
 3. **构建镜像**:
 
     ```bash
-    docker build -t automation-slim .
+    docker build -t automation-aio .
     ```
 
 ---
