@@ -226,8 +226,12 @@ if __name__ == '__main__':
     executor = SeleniumIDEExecutor(sys.argv[1])
     success, msg = executor.execute()
     
-    if len(sys.argv) > 3:
-        send_telegram_notification(Path(sys.argv[1]).name, success, msg, sys.argv[2], sys.argv[3])
+    # 获取 Telegram 配置 (优先使用命令行参数，否则读取环境变量)
+    tg_token = sys.argv[2] if len(sys.argv) > 2 else os.environ.get('TELEGRAM_BOT_TOKEN')
+    tg_chat_id = sys.argv[3] if len(sys.argv) > 3 else os.environ.get('TELEGRAM_CHAT_ID')
+
+    if tg_token and tg_chat_id:
+        send_telegram_notification(Path(sys.argv[1]).name, success, msg, tg_token, tg_chat_id)
     
     send_email_notification(Path(sys.argv[1]).name, success, msg)
     sys.exit(0 if success else 1)
