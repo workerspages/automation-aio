@@ -100,7 +100,12 @@ services:
       #   3. 启动后在日志中查看随机生成的 URL
       
       # --- 数据库 (可选，留空默认使用内置 SQLite) ---
+      # 如需外接 MariaDB/MySQL，请填写以下变量:
       - MARIADB_HOST=
+      - MARIADB_PORT=3306
+      - MARIADB_USER=root
+      - MARIADB_PASSWORD=root
+      - MARIADB_DB=automation_aio
     volumes:
       # 映射脚本目录
       - ./Downloads:/home/headless/Downloads
