@@ -604,21 +604,40 @@ def execute_autokey_script(script_name, task_name):
     return success
 
 def reload_autokey():
-    """强制重启 AutoKey 以加载新脚本"""
+    """强制重启 AutoKey 以加载新脚本 (带健康检查)"""
     try:
         logger.info("♻️ Reloading AutoKey...")
+        
         # 1. Kill existing
         subprocess.run(['pkill', '-f', 'autokey'], capture_output=True)
-        time.sleep(0.5)
+        time.sleep(1)
         
         # 2. Restart (headless environment)
         env = get_desktop_env()
-        subprocess.Popen(['autokey-gtk', '--verbose'], 
+        pro = subprocess.Popen(['autokey-gtk', '--verbose'], 
                          env=env,
                          stdout=subprocess.DEVNULL, 
                          stderr=subprocess.DEVNULL,
                          start_new_session=True)
-        logger.info("✅ AutoKey restarted")
+        
+        # 3. Wait for DBus service polling
+        logger.info("⏳ Waiting for AutoKey DBus service...")
+        for i in range(20): # Max 10 seconds
+            time.sleep(0.5)
+            # 尝试列出脚本，如果成功则说明 DBus 服务已就绪
+            check_cmd = ['autokey-run', '-l']
+            res = subprocess.run(check_cmd, env=env, capture_output=True)
+            if res.returncode == 0:
+                logger.info(f"✅ AutoKey restarted and ready (waited {i*0.5}s)")
+                return
+            
+            # 检查进程是否意外退出
+            if pro.poll() is not None:
+                logger.error("❌ AutoKey process died unexpectedly")
+                return
+
+        logger.warning("⚠️ AutoKey restart timed out waiting for DBus (but process is running)")
+
     except Exception as e:
         logger.error(f"❌ Failed to reload AutoKey: {e}")
 
