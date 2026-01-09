@@ -53,8 +53,8 @@
 在你的服务器上执行：
 
 ```bash
-mkdir -p automation-slim/data automation-slim/logs automation-slim/Downloads
-cd automation-slim
+mkdir -p automation-aio/data automation-aio/logs automation-aio/Downloads
+cd automation-aio
 ```
 
 ### 2. 创建配置文件
@@ -65,56 +65,63 @@ cd automation-slim
 version: '3.8'
 
 services:
-  automation-slim:
-    # 如果你自己构建了镜像，请修改为你的镜像名，或者使用 build: .
-    image: ghcr.io/workerspages/automation-aio:slim 
-    container_name: automation-slim
+  automation-aio:
+    image: ghcr.io/workerspages/automation-aio:autokey
+    container_name: automation-aio
     ports:
       - "5000:5000"
     environment:
-      # --- 基础配置 ---
-      - VNC_PW=admin          # VNC 远程连接密码
-      - ADMIN_USERNAME=admin  # Web 面板登录账号
-      - ADMIN_PASSWORD=admin123 # Web 面板登录密码
-      - TZ=Asia/Shanghai      # 时区设置
-      
-      # --- 通知配置 (可选) ---
-      - TELEGRAM_BOT_TOKEN=
-      - TELEGRAM_CHAT_ID=
-      - ENABLE_EMAIL_NOTIFY=false
-      
-      # --- 需要配置应用公网链接? ---
-      # 用于在邮件/Telegram通知中生成正确的跳转链接
-      - APP_PUBLIC_DOMAIN=https://your-domain.com
+      - VNC_RESOLUTION=1360x768               # 远程桌面分辨率
+      - TZ=Asia/Shanghai                      # 容器时区
+      - VNC_PW=admin
+      - SECRET_KEY=your-secret-key-change-this
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin123
+      - DISPLAY=:1                            # 显示面画在编号为 1 的虚拟显示器上 (请误修改)
+      - MAX_SCRIPT_TIMEOUT=600                # 全局环境变量-如果你代码里的 sleep 时间超过了 300 秒，Flask 后端会认为任务卡死
 
-      # --- 内网穿透 (Cloudflare Tunnel) ---
-      # 模式 A: Token (推荐 - 固定域名)
-      #   1. 在 Cloudflare Zero Trust 面板创建 Tunnel 获取 Token
-      #   2. 在面板 Public Hostname 设置: your-domain.com -> http://localhost:5000
-      - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=
-      
-      # 模式 B: Quick Tunnel (测试用 - 随机域名)
-      #   1. ENABLE_CLOUDFLARE_TUNNEL=true
-      #   2. 留空 TOKEN
-      #   3. 启动后在日志中查看随机生成的 URL
-      
+      # === 数据库配置 (可选：连接外部 MariaDB) ===
       # --- 数据库 (可选，留空默认使用内置 SQLite) ---
       # 如需外接 MariaDB/MySQL，请填写以下变量:
-      - MARIADB_HOST=
+      - MARIADB_HOST= # 例如: 192.168.1.100
       - MARIADB_PORT=3306
       - MARIADB_USER=root
       - MARIADB_PASSWORD=root
       - MARIADB_DB=automation_aio
+      # =======================================
+
+      # === Telegram 通知配置 ===
+      - TELEGRAM_BOT_TOKEN=
+      - TELEGRAM_CHAT_ID=
+
+      # === 邮件通知配置 ===
+       # 开启邮件通知:true   关闭邮件通知:false 
+      - ENABLE_EMAIL_NOTIFY=true
+      - SMTP_HOST=smtp.gmail.com
+      - SMTP_PORT=587
+      - SMTP_USER=your_email@gmail.com
+      - SMTP_PASSWORD=your_app_password
+      - EMAIL_FROM=your_email@gmail.com
+      - EMAIL_TO=receiver@example.com
+
+      # === Cloudflare Tunnel 配置 ===
+      # 必须提供 Token，否则脚本会报错并跳过启动  开启:true 关闭:false 
+      - ENABLE_CLOUDFLARE_TUNNEL=false
+      - CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+      - APP_PUBLIC_DOMAIN=                     # Cloudflare Tunnel后台配置的域名
     volumes:
-      # 映射脚本目录
       - ./Downloads:/home/headless/Downloads
-      # 映射数据和日志目录
       - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
-    # ⚠️ 关键配置：防止 Chrome 崩溃
-    shm_size: '2gb' 
+    shm_size: '2gb'
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
 ```
 
 ### 3. 启动服务
@@ -254,7 +261,7 @@ A: 在 Web 面板的任务卡片上，会显示最后一次运行的状态。你
 3. **构建镜像**:
 
     ```bash
-    docker build -t automation-slim .
+    docker build -t automation-aio .
     ```
 
 ---
