@@ -108,11 +108,12 @@ services:
       # 必须提供 Token，否则脚本会报错并跳过启动  开启:true 关闭:false 
       - ENABLE_CLOUDFLARE_TUNNEL=false
       - CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
-      - APP_PUBLIC_DOMAIN=                     # Cloudflare Tunnel后台配置的域名
+      - APP_PUBLIC_DOMAIN=                                         # Cloudflare Tunnel后台配置的域名
     volumes:
       - ./Downloads:/home/headless/Downloads
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./scripts:/home/headless/.config/autokey/data/MyScripts    # autokey脚本文件目录
     restart: unless-stopped
     shm_size: '2gb'
     healthcheck:
