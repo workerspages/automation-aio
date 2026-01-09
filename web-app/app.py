@@ -595,6 +595,7 @@ def execute_autokey_script(script_name, task_name):
 
     success = result.returncode == 0
     log_msg = (result.stdout + "\n" + result.stderr).strip() or "Command Sent"
+    if success: logger.info(f"AutoKey {script_name} Success")
     else: logger.error(f"AutoKey Failed: {result.stderr}")
     
     from scripts.task_executor import send_telegram_notification, send_email_notification
