@@ -66,7 +66,10 @@ def send_email_notification(script_name, success, message):
     
     status_text = '✅ 执行成功' if success else '❌ 执行失败'
     subject = f"[{status_text}] 任务通知: {script_name}"
-    body = f"<h3>任务报告</h3><p><b>任务:</b> {script_name}</p><p><b>状态:</b> {status_text}</p><p><b>时间:</b> {datetime.now()}</p><hr><pre>{message}</pre>"
+    public_domain = os.environ.get('APP_PUBLIC_DOMAIN', '').rstrip('/')
+    link_html = f'<p><a href="{public_domain}">View Dashboard</a></p>' if public_domain else ''
+    
+    body = f"<h3>任务报告</h3><p><b>任务:</b> {script_name}</p><p><b>状态:</b> {status_text}</p><p><b>时间:</b> {datetime.now()}</p>{link_html}<hr><pre>{message}</pre>"
     
     msg = MIMEMultipart()
     msg['From'] = config['from_addr'] or config['user']
@@ -85,7 +88,10 @@ def send_email_notification(script_name, success, message):
 def send_telegram_notification(script_name, success, message, bot_token, chat_id):
     if not bot_token or not chat_id: return
     status_emoji = '✅' if success else '❌'
-    text = f"<b>{status_emoji} 任务通知</b>\n\n<b>任务:</b> {script_name}\n<b>时间:</b> {datetime.now()}\n<pre>{message[-2000:] if message else 'No Log'}</pre>"
+    public_domain = os.environ.get('APP_PUBLIC_DOMAIN', '').rstrip('/')
+    link_text = f"\n<a href='{public_domain}'>Open Dashboard</a>" if public_domain else ""
+    
+    text = f"<b>{status_emoji} 任务通知</b>\n\n<b>任务:</b> {script_name}\n<b>时间:</b> {datetime.now()}{link_text}\n<pre>{message[-2000:] if message else 'No Log'}</pre>"
     try:
         requests.post(f'https://api.telegram.org/bot{bot_token}/sendMessage', data={'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'}, timeout=10)
     except Exception as e: logger.error(f"Telegram fail: {e}")

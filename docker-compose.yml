@@ -11,10 +11,10 @@ services:
       - SECRET_KEY=your-secret-key-change-this
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin123
-      
+
       # === 数据库配置 (可选：连接外部 MariaDB) ===
       # 如果留空或注释，默认使用容器内置的 SQLite
-      - MARIADB_HOST=           # 例如: 192.168.1.100
+      - MARIADB_HOST= # 例如: 192.168.1.100
       - MARIADB_PORT=3306
       - MARIADB_USER=root
       - MARIADB_PASSWORD=root
@@ -33,19 +33,24 @@ services:
       - SMTP_PASSWORD=your_app_password
       - EMAIL_FROM=your_email@gmail.com
       - EMAIL_TO=receiver@example.com
-      
+
       - ENABLE_CLOUDFLARE_TUNNEL=false
-      
+
       # === Cloudflare Tunnel 配置 ===
       # 模式 A: Token (推荐 - 固定域名)
       # 1. 在 Cloudflare 面板创建 Tunnel，获取 Token。
       # 2. 在 Cloudflare 面板配置 Public Hostname (例如: app.example.com -> http://localhost:5000)
       - CLOUDFLARE_TUNNEL_TOKEN=
-      
+
       # 模式 B: Quick Tunnel (测试用 - 随机域名)
       # 1. 设置 ENABLE_CLOUDFLARE_TUNNEL=true
       # 2. 留空 CLOUDFLARE_TUNNEL_TOKEN
       # 3. 启动后查看日志获取随机域名 (例如: https://random-name.trycloudflare.com)
+
+      # === 应用公网域名 (可选) ===
+      # 用于在通知(邮件/Telegram)中生成正确的访问链接
+      - APP_PUBLIC_DOMAIN=
+
       - DISPLAY=:1
     volumes:
       - ./Downloads:/home/headless/Downloads
@@ -54,7 +59,7 @@ services:
     restart: unless-stopped
     shm_size: '2gb'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
