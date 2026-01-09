@@ -49,6 +49,7 @@ services:
       - ./Downloads:/home/headless/Downloads
       - ./data:/app/data
       - ./logs:/app/logs
+      - ./scripts:/app/scripts
     restart: unless-stopped
     shm_size: '2gb'
     healthcheck:
