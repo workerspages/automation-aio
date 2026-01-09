@@ -2,8 +2,8 @@
 
 [![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow.svg)](https://www.python.org/)
-[![Size](https://img.shields.io/badge/Image%20Size-~500MB-green)]()
-[![License](https://img.shields.io/badge/License-MIT-orange.svg)]()
+[![Size](https://img.shields.io/badge/Image%20Size-~500MB-green)](https://github.com/workerspages/automation-aio)
+[![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 
 **Ubuntu Automation AIO (Slim)** 是一个专为轻量化、高性能自动化任务设计的 Docker 工控平台。
 
@@ -16,41 +16,49 @@
 ## ✨ 核心特性
 
 ### ⚡ 极致轻量 (Ultra-Slim)
-*   **Openbox + Tint2**: 替换了 XFCE 桌面，待机内存占用极低（仅约 100MB），启动速度飞快。
-*   **体积缩减**: 镜像体积大幅减小，更适合低配 VPS 部署。
-*   **中文支持**: 内置文泉驿微米黑字体 (`fonts-wqy-microhei`)，完美解决 Chrome 中文乱码问题。
+
+* **Openbox + Tint2**: 替换了 XFCE 桌面，待机内存占用极低（仅约 100MB），启动速度飞快。
+* **体积缩减**: 镜像体积大幅减小，更适合低配 VPS 部署。
+* **中文支持**: 内置文泉驿微米黑字体 (`fonts-wqy-microhei`)，完美解决 Chrome 中文乱码问题。
 
 ### 🤖 强大的自动化工具链
-*   **Google Chrome**: 官方稳定版，预置了防检测配置 (Anti-bot)，隐藏 WebDriver 特征。
-*   **Selenium & Playwright**: 环境已预装，可直接调用系统 Chrome 运行。
-*   **AutoKey (GTK)**: 系统级键盘/鼠标宏工具，已修复崩溃问题，支持 Python 脚本控制系统输入。
+
+* **Google Chrome**: 官方稳定版，预置了防检测配置 (Anti-bot)，隐藏 WebDriver 特征。
+* **Selenium & Playwright**: 环境已预装，可直接调用系统 Chrome 运行。
+* **AutoKey (GTK)**: 系统级键盘/鼠标宏工具，已修复崩溃问题，支持 Python 脚本控制系统输入。
 
 ### 📅 可视化 Web 调度台
-*   **任务管理**: 在网页上添加、编辑、删除定时任务。
-*   **在线代码编辑**: 内置代码编辑器，直接在浏览器中编写 Python 脚本。
-*   **拟人化调度**: 支持 **Cron** 表达式，独创 **“随机时间窗口”** (Random Delay) 模式，模拟真人操作时间的不确定性。
+
+* **任务管理**: 在网页上添加、编辑、删除定时任务。
+* **在线代码编辑**: 内置代码编辑器，直接在浏览器中编写 Python 脚本。
+* **拟人化调度**: 支持 **Cron** 表达式，独创 **“随机时间窗口”** (Random Delay) 模式，模拟真人操作时间的不确定性。
 
 ### 🛠️ 远程管理与辅助
-*   **NoVNC**: 直接在浏览器中访问远程桌面，无需安装客户端。
-*   **剪贴板同步**: 完美支持宿主机与容器之间的复制粘贴（由 `autocutsel` 驱动）。
-*   **Cloudflare Tunnel**: 内置内网穿透支持，无需公网 IP 即可远程管理。
-*   **消息推送**: 任务成功或失败可推送到 Telegram Bot 或 Email。
+
+* **NoVNC**: 直接在浏览器中访问远程桌面，无需安装客户端。
+* **剪贴板同步**: 完美支持宿主机与容器之间的复制粘贴（由 `autocutsel` 驱动）。
+* **Cloudflare Tunnel**: 内置内网穿透支持，无需公网 IP 即可远程管理。
+* **消息推送**: 任务成功或失败可推送到 Telegram Bot 或 Email。
 
 ---
 
 ## 🛠️ 3分钟快速部署指南
 
 ### 前置条件
+
 你需要一台安装了 [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/) 的服务器（Linux/Windows/Mac 均可）。
 
 ### 1. 创建项目目录
+
 在你的服务器上执行：
+
 ```bash
 mkdir -p automation-slim/data automation-slim/logs automation-slim/Downloads
 cd automation-slim
 ```
 
 ### 2. 创建配置文件
+
 创建名为 `docker-compose.yml` 的文件，并填入以下内容：
 
 ```yaml
@@ -75,9 +83,21 @@ services:
       - TELEGRAM_CHAT_ID=
       - ENABLE_EMAIL_NOTIFY=false
       
-      # --- 内网穿透 (可选) ---
+      # --- 需要配置应用公网链接? ---
+      # 用于在邮件/Telegram通知中生成正确的跳转链接
+      - APP_PUBLIC_DOMAIN=https://your-domain.com
+
+      # --- 内网穿透 (Cloudflare Tunnel) ---
+      # 模式 A: Token (推荐 - 固定域名)
+      #   1. 在 Cloudflare Zero Trust 面板创建 Tunnel 获取 Token
+      #   2. 在面板 Public Hostname 设置: your-domain.com -> http://localhost:5000
       - ENABLE_CLOUDFLARE_TUNNEL=false
       - CLOUDFLARE_TUNNEL_TOKEN=
+      
+      # 模式 B: Quick Tunnel (测试用 - 随机域名)
+      #   1. ENABLE_CLOUDFLARE_TUNNEL=true
+      #   2. 留空 TOKEN
+      #   3. 启动后在日志中查看随机生成的 URL
       
       # --- 数据库 (可选，留空默认使用内置 SQLite) ---
       - MARIADB_HOST=
@@ -93,9 +113,11 @@ services:
 ```
 
 ### 3. 启动服务
+
 ```bash
 docker-compose up -d
 ```
+
 等待几秒钟，服务即可启动。
 
 ---
@@ -103,32 +125,36 @@ docker-compose up -d
 ## 📖 使用指南
 
 ### 1. 访问控制台
+
 打开浏览器访问 `http://<服务器IP>:5000`。
-*   **默认账号**: `admin`
-*   **默认密码**: `admin123`
+
+* **默认账号**: `admin`
+* **默认密码**: `admin123`
 
 ### 2. 远程桌面 (重要：Openbox 操作说明)
+
 点击面板右上角的 **"🖥️ 远程桌面"** 按钮进入 NoVNC 界面。
 
-*   **界面布局**:
-    *   你会看到一个 **纯色背景**（通常是深灰色），这**不是**死机了，而是 Openbox 的极简风格。
-    *   屏幕底部有一个细长的任务栏 (`tint2`)，显示当前打开的窗口和时间。
-    *   右下角托盘区应该能看到红色的 **AutoKey 图标**。
+* **界面布局**:
+  * 你会看到一个 **纯色背景**（通常是深灰色），这**不是**死机了，而是 Openbox 的极简风格。
+  * 屏幕底部有一个细长的任务栏 (`tint2`)，显示当前打开的窗口和时间。
+  * 右下角托盘区应该能看到红色的 **AutoKey 图标**。
 
-*   **如何打开菜单？**
-    *   **点击鼠标右键**：在桌面任意空白处点击右键，即可弹出主菜单。
-    *   从中可以打开 **Terminal (终端)**、**File Manager (文件管理器)** 等工具。
+* **如何打开菜单？**
+  * **点击鼠标右键**：在桌面任意空白处点击右键，即可弹出主菜单。
+  * 从中可以打开 **Terminal (终端)**、**File Manager (文件管理器)** 等工具。
 
-*   **📋 剪贴板如何同步？**
-    *   **从 VNC 复制到 电脑**: 在 VNC 里选中文字复制 -> 打开 VNC 侧边栏 -> 点击 **Clipboard** -> 文本框中会出现内容 -> 手动复制出来。
-    *   **从 电脑 复制到 VNC**: 电脑复制 -> 打开 VNC 侧边栏 -> 点击 **Clipboard** -> 粘贴到文本框 -> 在 VNC 内部按 `Ctrl+V`。
+* **📋 剪贴板如何同步？**
+  * **从 VNC 复制到 电脑**: 在 VNC 里选中文字复制 -> 打开 VNC 侧边栏 -> 点击 **Clipboard** -> 文本框中会出现内容 -> 手动复制出来。
+  * **从 电脑 复制到 VNC**: 电脑复制 -> 打开 VNC 侧边栏 -> 点击 **Clipboard** -> 粘贴到文本框 -> 在 VNC 内部按 `Ctrl+V`。
 
 ### 3. 编写与运行脚本
 
 #### 方式 A：编写 Python/Selenium 脚本
-1.  在 Web 面板点击 **"📂 脚本管理"** -> **Downloads** 选项卡。
-2.  点击 **"+ 新建脚本"**，输入文件名（如 `test_chrome.py`）。
-3.  输入以下示例代码并保存：
+
+1. 在 Web 面板点击 **"📂 脚本管理"** -> **Downloads** 选项卡。
+2. 点击 **"+ 新建脚本"**，输入文件名（如 `test_chrome.py`）。
+3. 输入以下示例代码并保存：
 
 ```python
 from selenium import webdriver
@@ -145,23 +171,29 @@ print(browser.title)
 time.sleep(5)
 browser.quit()
 ```
-4.  回到首页，**"+ 新建任务"**，选择该脚本并点击 **"▶ 立即运行"**。
+
+1. 回到首页，**"+ 新建任务"**，选择该脚本并点击 **"▶ 立即运行"**。
 
 #### 方式 B：使用 AutoKey 模拟键鼠
-1.  在 **"📂 脚本管理"** -> **AutoKey** 选项卡新建脚本。
-2.  输入 AutoKey 代码（例如模拟键盘输入）：
+
+1. 在 **"📂 脚本管理"** -> **AutoKey** 选项卡新建脚本。
+2. 输入 AutoKey 代码（例如模拟键盘输入）：
+
 ```python
 # 输入 Hello World 并回车
 keyboard.send_keys("Hello World")
 keyboard.send_keys("<enter>")
 ```
-3.  注意：AutoKey 脚本通常配合窗口触发，但在本平台中，你可以通过 Web 面板直接触发它。
+
+1. **自动重载**: 系统会自动检测 AutoKey 脚本的变更并重载服务，新建脚本后可立即使用。
+2. 注意：AutoKey 脚本通常配合窗口触发，但在本平台中，你可以通过 Web 面板直接触发它。
 
 ---
 
 ## ⚙️ 进阶配置
 
 ### 关于 Playwright 的使用
+
 为了极致压缩体积，镜像中**未预装** Playwright 自带的庞大浏览器二进制包。
 如果你使用 Playwright，必须在代码中指定使用系统安装的 Chrome：
 
@@ -201,20 +233,25 @@ A: 在 Web 面板的任务卡片上，会显示最后一次运行的状态。你
 
 如果你想自己构建镜像：
 
-1.  **克隆代码**:
+1. **克隆代码**:
+
     ```bash
     git clone https://github.com/workerspages/automation-aio.git
     ```
-2.  **准备依赖文件**:
+
+2. **准备依赖文件**:
     构建前必须确保 `browser-configs/chrome.zip` 存在（可以是个空的 zip，但在构建时必须要有）：
+
     ```bash
     mkdir -p browser-configs && touch browser-configs/dummy && zip browser-configs/chrome.zip browser-configs/dummy
     ```
-3.  **构建镜像**:
+
+3. **构建镜像**:
+
     ```bash
     docker build -t automation-slim .
     ```
 
 ---
 
-**Enjoy your automation! 🚀**
+## Enjoy your automation! 🚀
