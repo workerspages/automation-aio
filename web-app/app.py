@@ -604,8 +604,13 @@ def execute_autokey_script(script_name, task_name):
 
     success = result.returncode == 0
     
-    # === 日志捕获改进 (End) ===
-    # 等待异步脚本输出 (Hack)
+    # === 构建日志通知 ===
+    # 1. 控制台输出 (Stdout/Stderr)
+    console_out = (result.stdout + "\n" + result.stderr).strip()
+    if console_out:
+        log_msg += f"--- Console Output ---\n{console_out}\n\n"
+
+    # 2. AutoKey 日志文件 (Hack: 等待异步写入)
     if success:
         time.sleep(2) # 等待脚本可能的输出
         try:
@@ -613,11 +618,12 @@ def execute_autokey_script(script_name, task_name):
                 f.seek(start_pos)
                 new_logs = f.read()
                 if new_logs.strip():
-                    log_msg += f"\n\n--- 脚本输出 (Snapshot) ---\n{new_logs}"
+                    log_msg += f"--- Script Log (autokey.log) ---\n{new_logs}"
         except Exception as e:
             logger.error(f"Failed to read autokey logs: {e}")
 
-    log_msg = log_msg.strip()
+    log_msg = log_msg.strip() or "No output captured."
+    
     if success: logger.info(f"AutoKey {script_name} Success")
     else: logger.error(f"AutoKey Failed: {result.stderr}")
     
