@@ -59,7 +59,12 @@ scheduler.start()
 
 task_executor_pool = ThreadPoolExecutor(max_workers=5)
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    handlers=[
+                        logging.StreamHandler(),
+                        logging.FileHandler('/app/logs/app.log', encoding='utf-8')
+                    ])
 logger = logging.getLogger(__name__)
 
 # --- 目录配置 (关键修改：指向 Sample Scripts) ---
@@ -449,8 +454,23 @@ def execute_script_core(task_id):
     script_path = task.script_path
     
     # 路径清理
-    if script_path.startswith("[downloads] "): script_path = script_path.replace("[downloads] ", "", 1)
-    if script_path.startswith("[autokey] "): script_path = script_path.replace("[autokey] ", "", 1)
+    # 路径清理与绝对路径解析
+    original_path = script_path
+    if script_path.startswith("[downloads] "): 
+        filename = script_path.replace("[downloads] ", "", 1)
+        script_path = str(BASE_DIRS['downloads'] / filename)
+    elif script_path.startswith("[autokey] "): 
+        filename = script_path.replace("[autokey] ", "", 1)
+        script_path = str(BASE_DIRS['autokey'] / filename)
+    
+    # 检查文件是否存在
+    if not os.path.exists(script_path) and not ('autokey/data' in script_path or 'Sample Scripts' in script_path):
+         # AutoKey 脚本可能只是目录或逻辑名，先不强制检查物理路径，但在 try block 里会处理
+         # 这里主要拦截 Python/Side 脚本
+         logger.error(f"❌ Script file not found: {script_path} (Original: {original_path})")
+         task.last_status = 'File Missing'
+         db.session.commit()
+         return False
     
     success = False
     
