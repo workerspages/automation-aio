@@ -40,6 +40,13 @@
 * **Cloudflare Tunnel**: 内置内网穿透支持，无需公网 IP 即可远程管理。
 * **消息推送**: 任务成功或失败可推送到 Telegram Bot 或 Email。
 
+### ☁️ PaaS 平台优化 (NEW)
+
+* **低内存运行**: 针对 Railway/Zeabur/Koyeb 等 PaaS 平台优化，支持在 1GB 内存环境下运行。
+* **Chrome 内存优化**: 预置 7 项内存节省参数，V8 堆限制为 256MB。
+* **自动 Swap**: 启动时自动创建 512MB swap 文件，应对内存压力峰值。
+* **分辨率适配**: 默认 1024x600 分辨率 + 16bit 色深，减少 VNC 带宽占用。
+
 ---
 
 ## 🛠️ 3分钟快速部署指南
@@ -71,7 +78,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - VNC_RESOLUTION=1360x768               # 远程桌面分辨率
+      - VNC_RESOLUTION=1024x600               # 远程桌面分辨率 (PaaS优化)
       - TZ=Asia/Shanghai                      # 容器时区
       - VNC_PW=admin
       - SECRET_KEY=your-secret-key-change-this
@@ -239,6 +246,15 @@ A: 这是 **Ultra-Slim (极致瘦身)** 版本。为了将镜像体积控制在�
 
 **Q: 如何查看脚本的运行日志？**
 A: 在 Web 面板的任务卡片上，会显示最后一次运行的状态。你可以通过 SSH 进入容器查看详细日志：`/app/data/automation.log`。
+
+**Q: 部署到 PaaS 平台（Railway/Zeabur/Koyeb）很卡怎么办？**
+A: 本项目已针对 PaaS 平台进行优化。如仍卡顿，请确保：
+1. 平台分配至少 1GB RAM
+2. 使用优化后的默认配置（VNC_RESOLUTION=1024x600）
+3. 避免同时运行多个 Chrome 实例
+
+**Q: shm_size 在 PaaS 上不生效怎么办？**
+A: 本镜像已内置 `--disable-dev-shm-usage` 参数绕过此限制，无需额外配置。
 
 ---
 

@@ -31,8 +31,8 @@ ENV TZ=Asia/Shanghai \
   DISPLAY=:1 \
   VNC_PORT=5901 \
   NOVNC_PORT=6901 \
-  VNC_RESOLUTION=1360x768 \
-  VNC_COL_DEPTH=24 \
+  VNC_RESOLUTION=1024x600 \
+  VNC_COL_DEPTH=16 \
   VNC_PW=admin \
   ADMIN_USERNAME=admin \
   ADMIN_PASSWORD=admin123 \
@@ -81,7 +81,7 @@ RUN apt-get update && \
   mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
   # 创建启动包装脚本 (含 --disable-dev-shm-usage)
   echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
-  echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-dev-shm-usage --disable-gpu --no-default-browser-check --no-first-run "$@"' >> /usr/bin/google-chrome-stable && \
+  echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-dev-shm-usage --disable-gpu --no-default-browser-check --no-first-run --disable-extensions --disable-background-networking --disable-sync --disable-translate --disable-software-rasterizer --memory-pressure-off --js-flags="--max-old-space-size=256" "$@"' >> /usr/bin/google-chrome-stable && \
   chmod +x /usr/bin/google-chrome-stable && \
   # Chrome 策略
   mkdir -p /etc/opt/chrome/policies/managed && \

@@ -7,7 +7,7 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - VNC_RESOLUTION=1360x768               # 远程桌面分辨率
+      - VNC_RESOLUTION=1024x600               # 远程桌面分辨率 (PaaS优化: 降低至1024x600节省内存)
       - TZ=Asia/Shanghai                      # 容器时区
       - VNC_PW=admin
       - SECRET_KEY=your-secret-key-change-this
