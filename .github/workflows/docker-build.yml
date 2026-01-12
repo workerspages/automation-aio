@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ autokey ]
+    branches: [ PaaS ]
     tags: [ "v*" ]
   workflow_dispatch: {}
 
