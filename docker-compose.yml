@@ -32,7 +32,7 @@ services:
 
       # === 邮件通知配置 ===
        # 开启邮件通知:true   关闭邮件通知:false 
-      - ENABLE_EMAIL_NOTIFY=true
+      - ENABLE_EMAIL_NOTIFY=false
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=587
       - SMTP_USER=your_email@gmail.com
