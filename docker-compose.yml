@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   automation-aio:
-    image: ghcr.io/workerspages/automation-aio:autokey
+    image: ghcr.io/workerspages/automation-aio:paas
     container_name: automation-aio
     ports:
       - "5000:5000"
