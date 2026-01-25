@@ -259,8 +259,53 @@ A: 本项目已针对 PaaS 平台进行优化。如仍卡顿，请确保：
 2. 使用优化后的默认配置（VNC_RESOLUTION=1360x768）
 3. 避免同时运行多个 Chrome 实例
 
+3. 避免同时运行多个 Chrome 实例
+
 **Q: shm_size 在 PaaS 上不生效怎么办？**
 A: 本镜像已内置 `--disable-dev-shm-usage` 参数绕过此限制，无需额外配置。
+
+---
+
+## 🧩 进阶：如何使用 AI 自动过验证码
+
+本项目内置了 `AISolver` 工具类，您可以直接在 Python 脚本中调用大模型 (OpenAI / Claude) 来识别验证码。
+
+### 1. 准备工作
+
+确保在 `.env` 或 `docker-compose.yml` 中配置了 API Key：
+```yaml
+environment:
+  - OPENAI_API_KEY=sk-your-key-here
+```
+
+### 2. 编写脚本 (示例)
+
+在 **"📂 脚本管理"** 中新建脚本，引用内置工具即可实现全自动化：
+
+```python
+from selenium import webdriver
+# 引入内置 AI 求解器
+from utils.ai_solver import AISolver
+
+# ... 初始化浏览器 driver ...
+
+# 1. 遇到验证码，先截图
+element = driver.find_element("css selector", ".captcha-bg")
+element.screenshot("/tmp/captcha.png")
+
+# 2. 召唤 AI (自动读取环境变量中的 Key)
+solver = AISolver()
+gap_x = solver.identify_gap("/tmp/captcha.png")
+
+if gap_x:
+    print(f"🤖 AI 说缺口坐标是: {gap_x}")
+    # 3. 调用您的拖拽函数 (需自行编写轨迹模拟)
+    # smooth_drag(driver, slider_btn, gap_x)
+else:
+    print("❌ AI 没看懂这张图")
+```
+
+更多完整示例请参考项目目录下的 `scripts/example_ai_slider.py`。
 
 ---
 
