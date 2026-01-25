@@ -45,7 +45,7 @@
 * **低内存运行**: 针对 Railway/Zeabur/Koyeb 等 PaaS 平台优化，支持在 1GB 内存环境下运行。
 * **Chrome 内存优化**: 预置 7 项内存节省参数，V8 堆限制为 256MB。
 * **自动 Swap**: 启动时自动创建 512MB swap 文件，应对内存压力峰值。
-* **分辨率适配**: 默认 1024x600 分辨率 + 16bit 色深，减少 VNC 带宽占用。
+* **分辨率适配**: 默认 1360x768 分辨率 + 16bit 色深，减少 VNC 带宽占用。
 
 ---
 
@@ -73,7 +73,7 @@ version: '3.8'
 
 services:
   automation-aio:
-    image: ghcr.io/workerspages/automation-aio:autokey
+    image: ghcr.io/workerspages/automation-aio:paas
     container_name: automation-aio
     ports:
       - "8080:8080"
@@ -250,7 +250,7 @@ A: 在 Web 面板的任务卡片上，会显示最后一次运行的状态。你
 **Q: 部署到 PaaS 平台（Railway/Zeabur/Koyeb）很卡怎么办？**
 A: 本项目已针对 PaaS 平台进行优化。如仍卡顿，请确保：
 1. 平台分配至少 1GB RAM
-2. 使用优化后的默认配置（VNC_RESOLUTION=1024x600）
+2. 使用优化后的默认配置（VNC_RESOLUTION=1360x768）
 3. 避免同时运行多个 Chrome 实例
 
 **Q: shm_size 在 PaaS 上不生效怎么办？**
@@ -279,6 +279,12 @@ A: 本镜像已内置 `--disable-dev-shm-usage` 参数绕过此限制，无需�
 
     ```bash
     docker build -t automation-aio .
+    ```
+
+    **构建多架构镜像 (AMD64 + ARM64)**:
+
+    ```bash
+    docker buildx build --platform linux/amd64,linux/arm64 -t automation-aio --push .
     ```
 
 ---
