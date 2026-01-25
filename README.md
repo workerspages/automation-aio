@@ -78,23 +78,23 @@ services:
     ports:
       - "5000:5000"
     environment:
-      - VNC_RESOLUTION=1024x600               # 远程桌面分辨率 (PaaS优化)
+      - VNC_RESOLUTION=1360x768               # 远程桌面分辨率 (PaaS优化: 降低至1360x768节省内存)
       - TZ=Asia/Shanghai                      # 容器时区
       - VNC_PW=admin
       - SECRET_KEY=your-secret-key-change-this
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin123
       - DISPLAY=:1                            # 显示面画在编号为 1 的虚拟显示器上 (请误修改)
-      - MAX_SCRIPT_TIMEOUT=600                # 全局环境变量-如果你代码里的 sleep 时间超过了 300 秒，Flask 后端会认为任务卡死
+      - MAX_SCRIPT_TIMEOUT=600                # 全局环境变量-如果你代码里的 sleep 时间超过了 600 秒，Flask 后端会认为任务卡死
 
       # === 数据库配置 (可选：连接外部 MariaDB) ===
       # --- 数据库 (可选，留空默认使用内置 SQLite) ---
       # 如需外接 MariaDB/MySQL，请填写以下变量:
-      - MARIADB_HOST= # 例如: 192.168.1.100
-      - MARIADB_PORT=3306
-      - MARIADB_USER=root
-      - MARIADB_PASSWORD=root
-      - MARIADB_DB=automation_aio
+    # - MARIADB_HOST= # 例如: 192.168.1.100
+    # - MARIADB_PORT=3306
+    # - MARIADB_USER=root
+    # - MARIADB_PASSWORD=root
+    # - MARIADB_DB=automation_aio
       # =======================================
 
       # === Telegram 通知配置 ===
@@ -103,7 +103,7 @@ services:
 
       # === 邮件通知配置 ===
        # 开启邮件通知:true   关闭邮件通知:false 
-      - ENABLE_EMAIL_NOTIFY=true
+      - ENABLE_EMAIL_NOTIFY=false
       - SMTP_HOST=smtp.gmail.com
       - SMTP_PORT=587
       - SMTP_USER=your_email@gmail.com
@@ -129,7 +129,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
 ```
 
 ### 3. 启动服务
