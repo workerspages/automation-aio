@@ -738,13 +738,14 @@ def initialize_system():
             
             db.session.commit()
 
-            # Security Fix: Remove default 'admin' user if we are using a different username
-            if admin_user != 'admin':
-                default_admin = User.query.filter_by(username='admin').first()
-                if default_admin:
-                    db.session.delete(default_admin)
-                    db.session.commit()
-                    print("Security: Removed default 'admin' user")
+            # Security Fix: Strict Single User Policy
+            # Delete any user that does not match the current configured admin_user
+            all_users = User.query.all()
+            for u in all_users:
+                if u.username != admin_user:
+                    db.session.delete(u)
+                    print(f"Security: Removed stale user '{u.username}'")
+            db.session.commit()
             
             tasks = Task.query.filter_by(enabled=True).all()
             for task in tasks:
