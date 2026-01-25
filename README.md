@@ -42,6 +42,7 @@
 
 ### ☁️ PaaS 平台优化 (NEW)
 
+* **AI 验证码自动识别**: 内置 `AISolver` 工具类，可调用 OpenAI/Claude 等大模型 API 自动识别滑动拼图缺口、文字点选等复杂验证码。
 * **低内存运行**: 针对 Railway/Zeabur/Koyeb 等 PaaS 平台优化，支持在 1GB 内存环境下运行。
 * **Chrome 内存优化**: 预置 7 项内存节省参数，V8 堆限制为 256MB。
 * **自动 Swap**: 启动时自动创建 512MB swap 文件，应对内存压力峰值。
@@ -110,6 +111,11 @@ services:
       - SMTP_PASSWORD=your_app_password
       - EMAIL_FROM=your_email@gmail.com
       - EMAIL_TO=receiver@example.com
+
+      # === AI 验证码识别配置 (可选) ===
+      - OPENAI_API_KEY=sk-...                     # 必填
+      - OPENAI_API_BASE=https://api.openai.com/v1 # 可选，支持第三方代理
+      - AI_MODEL=gpt-4o                           # 默认 gpt-4o
 
       # === Cloudflare Tunnel 配置 ===
       # 必须提供 Token，否则脚本会报错并跳过启动  开启:true 关闭:false 
