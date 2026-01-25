@@ -737,6 +737,14 @@ def initialize_system():
                 print(f"Updated password for admin user: {admin_user}")
             
             db.session.commit()
+
+            # Security Fix: Remove default 'admin' user if we are using a different username
+            if admin_user != 'admin':
+                default_admin = User.query.filter_by(username='admin').first()
+                if default_admin:
+                    db.session.delete(default_admin)
+                    db.session.commit()
+                    print("Security: Removed default 'admin' user")
             
             tasks = Task.query.filter_by(enabled=True).all()
             for task in tasks:
