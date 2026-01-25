@@ -15,6 +15,12 @@ if [ ! -f /swapfile ] && [ -w / ]; then
     echo "Swap file created successfully."
 fi
 
+# === VNC Resolution Fix ===
+if [ -n "${VNC_RESOLUTION}" ]; then
+    echo "Using custom VNC resolution: ${VNC_RESOLUTION}"
+    sed -i "s/1024x600/${VNC_RESOLUTION}/g" /etc/supervisor/conf.d/services.conf
+fi
+
 # 1. 检查 Chrome
 if command -v google-chrome-stable &> /dev/null; then
     echo "✅ Google Chrome Installed"
