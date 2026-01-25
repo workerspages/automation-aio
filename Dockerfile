@@ -4,6 +4,7 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ARG TARGETARCH
 USER root
 
 # 环境变量
@@ -27,7 +28,7 @@ ENV TZ=Asia/Shanghai \
   FLASK_ENV=production \
   FLASK_DEBUG=false \
   HOST=0.0.0.0 \
-  PORT=5000 \
+  PORT=8080 \
   DISPLAY=:1 \
   VNC_PORT=5901 \
   NOVNC_PORT=6901 \
@@ -46,6 +47,7 @@ ENV TZ=Asia/Shanghai \
 RUN apt-get update && \
   # 1. 安装核心工具
   apt-get install -y --no-install-recommends \
+  software-properties-common gpg-agent \
   wget curl ca-certificates git \
   vim nano sudo tzdata locales net-tools openssh-client \
   iproute2 iputils-ping supervisor cron sqlite3 \
@@ -66,23 +68,35 @@ RUN apt-get update && \
   xautomation xdotool kdialog imagemagick nginx nodejs npm unzip p7zip-full \
   # 8. AutoKey
   autokey-gtk \
-  # 9. Chrome 依赖库
+  # 9. Chrome 依赖库 (Common)
   libnss3 libatk-bridge2.0-0 libx11-xcb1 libxcomposite1 libxrandr2 \
   libpangocairo-1.0-0 libpango-1.0-0 libcups2 libdbus-1-3 libxdamage1 libxfixes3 \
   libgbm1 libdrm2 libwayland-client0 libatspi2.0-0 && \
   \
   # ============================================
-  # 安装 Google Chrome (PaaS 修正版)
+  # 浏览器安装 (Multi-Arch)
   # ============================================
-  wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb && \
-  apt-get install -y /tmp/chrome.deb && \
-  rm /tmp/chrome.deb && \
-  # 重命名原始二进制
-  mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original && \
-  # 创建启动包装脚本 (含 --disable-dev-shm-usage)
+  if [ "$TARGETARCH" = "amd64" ]; then \
+      echo "🔵 Installing Google Chrome for AMD64..."; \
+      wget -q https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -O /tmp/chrome.deb; \
+      apt-get install -y /tmp/chrome.deb; \
+      rm /tmp/chrome.deb; \
+      mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original; \
+  elif [ "$TARGETARCH" = "arm64" ]; then \
+      echo "🟠 Installing Chromium for ARM64 (using xtradeb PPA)..."; \
+      add-apt-repository -y ppa:xtradeb/apps; \
+      apt-get update; \
+      apt-get install -y chromium; \
+      ln -s /usr/bin/chromium /usr/bin/google-chrome-stable.original; \
+  else \
+      echo "❌ Unsupported architecture: $TARGETARCH"; exit 1; \
+  fi && \
+  \
+  # 创建统一的启动包装脚本 (含 --disable-dev-shm-usage)
   echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
   echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-dev-shm-usage --disable-gpu --no-default-browser-check --no-first-run --disable-extensions --disable-background-networking --disable-sync --disable-translate --disable-software-rasterizer --memory-pressure-off --js-flags="--max-old-space-size=256" "$@"' >> /usr/bin/google-chrome-stable && \
   chmod +x /usr/bin/google-chrome-stable && \
+  \
   # Chrome 策略
   mkdir -p /etc/opt/chrome/policies/managed && \
   echo '{ "CommandLineFlagSecurityWarningsEnabled": false, "DefaultBrowserSettingEnabled": false }' > /etc/opt/chrome/policies/managed/managed_policies.json && \
@@ -96,9 +110,10 @@ RUN apt-get update && \
   # ============================================
   # 安装 Cloudflare Tunnel
   # ============================================
-  wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb && \
-  dpkg -i cloudflared-linux-amd64.deb || apt-get install -f -y && \
-  rm -f cloudflared-linux-amd64.deb && \
+  echo "Downloading Cloudflared for $TARGETARCH..." && \
+  wget -q "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$TARGETARCH.deb" -O cloudflared.deb && \
+  dpkg -i cloudflared.deb || apt-get install -f -y && \
+  rm -f cloudflared.deb && \
   \
   # ============================================
   # 系统配置
@@ -112,7 +127,7 @@ RUN apt-get update && \
   # ============================================
   # 瘦身清理
   # ============================================
-  apt-get remove -y --purge gcc g++ make python3-dev && \
+  apt-get remove -y --purge gcc g++ make python3-dev software-properties-common gpg-agent && \
   apt-get autoremove -y && \
   rm -rf /usr/share/doc /usr/share/man /usr/share/info /usr/share/icons/Adwaita /usr/share/icons/HighContrast && \
   apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
@@ -271,6 +286,6 @@ RUN chown -R headless:headless /app /home/headless \
   && mkdir -p /tmp/.X11-unix /tmp/.ICE-unix \
   && chmod 1777 /tmp/.X11-unix /tmp/.ICE-unix
 
-EXPOSE 5000
+EXPOSE 8080
 WORKDIR /app
 CMD ["/app/scripts/entrypoint.sh"]

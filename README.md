@@ -76,7 +76,7 @@ services:
     image: ghcr.io/workerspages/automation-aio:autokey
     container_name: automation-aio
     ports:
-      - "5000:5000"
+      - "8080:8080"
     environment:
       - VNC_RESOLUTION=1360x768               # 远程桌面分辨率 (PaaS优化: 降低至1360x768节省内存)
       - TZ=Asia/Shanghai                      # 容器时区
@@ -124,7 +124,7 @@ services:
     restart: unless-stopped
     shm_size: '2gb'
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -145,10 +145,11 @@ docker-compose up -d
 
 ### 1. 访问控制台
 
-打开浏览器访问 `http://<服务器IP>:5000`。
+打开浏览器访问 `http://<服务器IP>:8080`。
 
 * **默认账号**: `admin`
 * **默认密码**: `admin123`
+* **注意**: 如果在 `docker-compose.yml` 中设置了 `ADMIN_PASSWORD`，每次容器重启时，系统都会强制将 Admin 用户的密码重置为该环境变量指定的值。
 
 ### 2. 远程桌面 (重要：Openbox 操作说明)
 

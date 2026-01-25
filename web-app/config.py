@@ -31,7 +31,7 @@ class Config:
     
     # Web应用配置
     HOST = '0.0.0.0'
-    PORT = 5000
+    PORT = 8080
     DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
     
     # 定时器配置

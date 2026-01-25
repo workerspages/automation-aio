@@ -722,11 +722,21 @@ def initialize_system():
     with app.app_context():
         try:
             admin_user = os.environ.get('ADMIN_USERNAME', 'admin')
-            if not User.query.filter_by(username=admin_user).first():
+            admin_pass = os.environ.get('ADMIN_PASSWORD', 'admin123')
+            
+            user = User.query.filter_by(username=admin_user).first()
+            if not user:
+                # Create new user
                 user = User(username=admin_user)
-                user.set_password(os.environ.get('ADMIN_PASSWORD', 'admin123'))
+                user.set_password(admin_pass)
                 db.session.add(user)
-                db.session.commit()
+                print(f"Created admin user: {admin_user}")
+            else:
+                # Force update password for existing user
+                user.set_password(admin_pass)
+                print(f"Updated password for admin user: {admin_user}")
+            
+            db.session.commit()
             
             tasks = Task.query.filter_by(enabled=True).all()
             for task in tasks:
@@ -737,4 +747,4 @@ def initialize_system():
 initialize_system()
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=8080, debug=False)
