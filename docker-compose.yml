@@ -40,6 +40,11 @@ services:
       - EMAIL_FROM=your_email@gmail.com
       - EMAIL_TO=receiver@example.com
 
+      # === AI 验证码识别配置 ===
+      - OPENAI_API_KEY=
+      - OPENAI_API_BASE=https://api.openai.com/v1
+      - AI_MODEL=gpt-4o
+
       # === Cloudflare Tunnel 配置 ===
       # 必须提供 Token，否则脚本会报错并跳过启动  开启:true 关闭:false 
       - ENABLE_CLOUDFLARE_TUNNEL=false
