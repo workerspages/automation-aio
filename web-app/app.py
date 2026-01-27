@@ -577,6 +577,102 @@ def wait_for_x11(timeout=30):
     logger.error(f"❌ X11 not ready after {timeout} seconds!")
     return False
 
+def ensure_autokey_running(env, timeout=30):
+    """
+    确保 AutoKey 服务正在运行
+    如果没有运行，尝试启动它并等待 D-Bus 服务就绪
+    """
+    logger.info("🔍 Checking if AutoKey is running...")
+    
+    # 检查 autokey-run -l 是否可用 (列出脚本命令)
+    try:
+        result = subprocess.run(
+            ['autokey-run', '-l'],
+            env=env,
+            capture_output=True,
+            timeout=5
+        )
+        if result.returncode == 0:
+            logger.info("✅ AutoKey is already running and responsive")
+            return True
+        else:
+            logger.warning(f"⚠️ AutoKey not responding: {result.stderr[:100] if result.stderr else 'no error output'}")
+    except subprocess.TimeoutExpired:
+        logger.warning("⚠️ AutoKey check timed out")
+    except Exception as e:
+        logger.warning(f"⚠️ AutoKey check failed: {e}")
+    
+    # AutoKey 不响应，尝试重新启动
+    logger.info("🔄 AutoKey not responding, attempting to restart...")
+    
+    # 先杀死可能存在的僵尸进程
+    try:
+        subprocess.run(['pkill', '-9', '-f', 'autokey'], capture_output=True, timeout=5)
+        time.sleep(2)
+        logger.info("🧹 Killed existing AutoKey processes")
+    except Exception as e:
+        logger.debug(f"pkill result: {e}")
+    
+    # 确保 AutoKey 配置目录存在
+    try:
+        autokey_dir = Path('/home/headless/.config/autokey/data/MyScripts')
+        autokey_dir.mkdir(parents=True, exist_ok=True)
+    except:
+        pass
+    
+    # 启动 AutoKey
+    log_file = None
+    try:
+        log_file = open('/app/logs/autokey.log', 'a')
+        proc = subprocess.Popen(
+            ['autokey-gtk', '--verbose'],
+            env=env,
+            stdout=log_file,
+            stderr=log_file,
+            start_new_session=True
+        )
+        logger.info(f"🚀 AutoKey started with PID: {proc.pid}")
+    except Exception as e:
+        logger.error(f"❌ Failed to start AutoKey: {e}")
+        if log_file:
+            log_file.close()
+        return False
+    
+    # 等待 D-Bus 服务就绪
+    logger.info(f"⏳ Waiting for AutoKey D-Bus service (timeout={timeout}s)...")
+    for i in range(timeout):
+        time.sleep(1)
+        try:
+            result = subprocess.run(
+                ['autokey-run', '-l'],
+                env=env,
+                capture_output=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                logger.info(f"✅ AutoKey is ready (waited {i+1}s)")
+                return True
+        except:
+            pass
+        
+        # 检查进程是否存活
+        if proc.poll() is not None:
+            logger.error(f"❌ AutoKey process died with exit code: {proc.returncode}")
+            try:
+                # 尝试读取最后的日志
+                with open('/app/logs/autokey.log', 'r') as f:
+                    lines = f.readlines()[-20:]
+                    logger.error(f"📋 Last AutoKey logs: {''.join(lines)}")
+            except:
+                pass
+            return False
+        
+        if i % 5 == 4:
+            logger.info(f"⏳ Still waiting for AutoKey... ({i+1}s)")
+    
+    logger.error(f"❌ AutoKey did not become ready after {timeout}s")
+    return False
+
 def get_telegram_config():
     return os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
 
@@ -643,6 +739,16 @@ def execute_autokey_script(script_name, task_name):
         return False
     
     env = get_desktop_env()
+    
+    # === PaaS 兼容性：确保 AutoKey 服务运行 ===
+    if not ensure_autokey_running(env, timeout=30):
+        error_msg = "AutoKey service is not running and could not be started"
+        logger.error(f"❌ {error_msg}")
+        from scripts.task_executor import send_telegram_notification, send_email_notification
+        if bot_token and chat_id: 
+            send_telegram_notification(f"{task_name} (AutoKey)", False, error_msg, bot_token, chat_id)
+        send_email_notification(f"{task_name} (AutoKey)", False, error_msg)
+        return False
     
     # === 诊断日志：打印关键环境变量 ===
     logger.info(f"🔧 Environment: DISPLAY={env.get('DISPLAY')}, "
