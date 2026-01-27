@@ -402,10 +402,15 @@ def update_task(task_id):
 @app.route('/api/tasks/<int:task_id>/run', methods=['POST'])
 @login_required
 def run_task_now(task_id):
+    logger.info(f"🎯 run_task_now called for task_id={task_id}")
     task = db.session.get(Task, task_id)
-    if not task: return jsonify({'error': 'Task not found'}), 404
+    if not task: 
+        logger.error(f"❌ Task {task_id} not found")
+        return jsonify({'error': 'Task not found'}), 404
     
+    logger.info(f"📋 Submitting task '{task.name}' (script: {task.script_path}) to executor pool")
     task_executor_pool.submit(run_task_with_context, app, task_id)
+    logger.info(f"✅ Task {task_id} submitted successfully")
     return jsonify({'success': True, 'message': '任务已加入执行队列'})
 
 @app.route('/api/tasks/<int:task_id>/toggle', methods=['POST'])
@@ -424,13 +429,15 @@ def toggle_task(task_id):
 # --- 执行逻辑 ---
 
 def run_task_with_context(app_instance, task_id):
-    print(f"🧵 Thread started for task {task_id}")
+    logger.info(f"🧵 Thread started for task {task_id}")
     try:
         with app_instance.app_context():
+            task = db.session.get(Task, task_id)
+            logger.info(f"🔧 About to execute task: {task.name if task else 'UNKNOWN'} (id={task_id})")
             success = execute_script_core(task_id)
-            print(f"🧵 Thread finished for task {task_id}, Success: {success}")
+            logger.info(f"🧵 Thread finished for task {task_id}, Success: {success}")
     except Exception as e:
-        print(f"❌ Thread error: {e}")
+        logger.error(f"❌ Thread error for task {task_id}: {e}")
         import traceback
         traceback.print_exc()
 
