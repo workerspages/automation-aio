@@ -514,18 +514,68 @@ def get_desktop_env():
     # 关键：确保 XAuthority 路径正确
     env['XAUTHORITY'] = '/home/headless/.Xauthority'
     
+    # === PaaS 诊断：检查 XAUTHORITY 文件 ===
+    xauth_path = Path('/home/headless/.Xauthority')
+    if xauth_path.exists():
+        try:
+            logger.info(f"✅ XAUTHORITY exists: {xauth_path}, size={xauth_path.stat().st_size} bytes")
+        except Exception as e:
+            logger.warning(f"⚠️ XAUTHORITY exists but cannot stat: {e}")
+    else:
+        logger.warning("⚠️ XAUTHORITY file does not exist! X11 auth may fail.")
+    
+    # === PaaS 诊断：检查 D-Bus 环境 ===
     dbus_file = Path('/home/headless/.dbus-env')
     if dbus_file.exists():
         try:
             content = dbus_file.read_text().strip()
+            logger.info(f"✅ D-Bus env file found: {content[:80]}...")
             if content.startswith('export '):
                 parts = content.replace('export ', '').split('=', 1)
                 if len(parts) == 2:
                     key = parts[0].strip()
                     value = parts[1].strip().strip("'").strip('"')
                     env[key] = value
-        except: pass
+                    logger.info(f"✅ D-Bus env loaded: {key}={value[:50]}...")
+        except Exception as e:
+            logger.error(f"❌ Failed to read D-Bus env: {e}")
+    else:
+        logger.warning("⚠️ D-Bus env file not found! AutoKey may fail to connect.")
+    
     return env
+
+def wait_for_x11(timeout=30):
+    """
+    等待 X11 服务就绪 (PaaS 环境可能需要更长时间)
+    返回 True 如果 X11 可用，否则返回 False
+    """
+    logger.info(f"🔍 Checking X11 availability (timeout={timeout}s)...")
+    start = time.time()
+    env = {'DISPLAY': ':1', 'HOME': '/home/headless', 'USER': 'headless'}
+    
+    while time.time() - start < timeout:
+        try:
+            # 使用 xdpyinfo 检查 X11 连接
+            result = subprocess.run(
+                ['xdpyinfo'],
+                env=env,
+                capture_output=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                elapsed = time.time() - start
+                logger.info(f"✅ X11 is ready (waited {elapsed:.1f}s)")
+                return True
+            else:
+                logger.debug(f"X11 not ready yet: {result.stderr[:100]}")
+        except subprocess.TimeoutExpired:
+            logger.debug("X11 check timed out, retrying...")
+        except Exception as e:
+            logger.debug(f"X11 check error: {e}")
+        time.sleep(1)
+    
+    logger.error(f"❌ X11 not ready after {timeout} seconds!")
+    return False
 
 def get_telegram_config():
     return os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
@@ -579,8 +629,24 @@ def execute_python_script(task_name, script_path):
 
 def execute_autokey_script(script_name, task_name):
     bot_token, chat_id = get_telegram_config()
-    env = get_desktop_env()
     log_msg = ""
+    
+    # === PaaS 兼容性：等待 X11 就绪 ===
+    logger.info(f"🚀 Starting AutoKey execution: {script_name} for task: {task_name}")
+    if not wait_for_x11(timeout=30):
+        error_msg = "X11 not ready after 30 seconds, cannot execute AutoKey script"
+        logger.error(f"❌ {error_msg}")
+        from scripts.task_executor import send_telegram_notification, send_email_notification
+        if bot_token and chat_id: 
+            send_telegram_notification(f"{task_name} (AutoKey)", False, error_msg, bot_token, chat_id)
+        send_email_notification(f"{task_name} (AutoKey)", False, error_msg)
+        return False
+    
+    env = get_desktop_env()
+    
+    # === 诊断日志：打印关键环境变量 ===
+    logger.info(f"🔧 Environment: DISPLAY={env.get('DISPLAY')}, "
+                f"DBUS={env.get('DBUS_SESSION_BUS_ADDRESS', 'NOT SET')[:50]}")
     
     # === 日志捕获改进 (Start) ===
     # 记录当前日志位置
@@ -592,15 +658,23 @@ def execute_autokey_script(script_name, task_name):
     
     # 策略 1: 尝试完整文件名 (例如 test_browser.py)
     cmd = ['autokey-run', '-s', script_name]
-    print(f"Running AutoKey (Try 1): {cmd}")
+    logger.info(f"📝 Running AutoKey (Try 1): {cmd}")
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+    
+    # === 详细输出日志 ===
+    logger.info(f"📝 AutoKey stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+    logger.info(f"📝 AutoKey stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
+    logger.info(f"📝 AutoKey return code: {result.returncode}")
     
     # 策略 2: 如果失败，尝试去掉后缀 (例如 test_browser)
     if result.returncode != 0 and script_name.endswith('.py'):
         stem = Path(script_name).stem
         cmd_retry = ['autokey-run', '-s', stem]
-        print(f"Running AutoKey (Try 2): {cmd_retry}")
+        logger.info(f"📝 Running AutoKey (Try 2 - stem only): {cmd_retry}")
         result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=300, env=env)
+        logger.info(f"📝 Retry stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+        logger.info(f"📝 Retry stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
+        logger.info(f"📝 Retry return code: {result.returncode}")
 
     success = result.returncode == 0
     
@@ -624,8 +698,10 @@ def execute_autokey_script(script_name, task_name):
 
     log_msg = log_msg.strip() or "No output captured."
     
-    if success: logger.info(f"AutoKey {script_name} Success")
-    else: logger.error(f"AutoKey Failed: {result.stderr}")
+    if success: 
+        logger.info(f"✅ AutoKey {script_name} Success")
+    else: 
+        logger.error(f"❌ AutoKey {script_name} Failed: {result.stderr}")
     
     from scripts.task_executor import send_telegram_notification, send_email_notification
     if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", success, log_msg, bot_token, chat_id)
