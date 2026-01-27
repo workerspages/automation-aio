@@ -587,97 +587,96 @@ def wait_for_x11(timeout=30):
 def ensure_autokey_running(env, timeout=30):
     """
     确保 AutoKey 服务正在运行
-    如果没有运行，尝试启动它并等待 D-Bus 服务就绪
+    注意：AutoKey 应该由 Openbox autostart 启动，这里只是确保它正常响应
     """
     logger.info("🔍 Checking if AutoKey is running...")
     
-    # 检查 autokey-run -l 是否可用 (列出脚本命令)
+    # 1. 首先检查 AutoKey 进程是否存在
+    autokey_running = False
     try:
         result = subprocess.run(
-            ['autokey-run', '-l'],
-            env=env,
+            ['pgrep', '-f', 'autokey-gtk'],
             capture_output=True,
             timeout=5
         )
-        if result.returncode == 0:
-            logger.info("✅ AutoKey is already running and responsive")
-            return True
+        autokey_running = result.returncode == 0
+        if autokey_running:
+            pids = result.stdout.decode().strip().split('\n')
+            logger.info(f"✅ AutoKey process found, PIDs: {pids}")
         else:
-            logger.warning(f"⚠️ AutoKey not responding: {result.stderr[:100] if result.stderr else 'no error output'}")
-    except subprocess.TimeoutExpired:
-        logger.warning("⚠️ AutoKey check timed out")
+            logger.warning("⚠️ No AutoKey process found")
     except Exception as e:
-        logger.warning(f"⚠️ AutoKey check failed: {e}")
+        logger.warning(f"⚠️ Failed to check AutoKey process: {e}")
     
-    # AutoKey 不响应，尝试重新启动
-    logger.info("🔄 AutoKey not responding, attempting to restart...")
-    
-    # 先杀死可能存在的僵尸进程
-    try:
-        subprocess.run(['pkill', '-9', '-f', 'autokey'], capture_output=True, timeout=5)
-        time.sleep(2)
-        logger.info("🧹 Killed existing AutoKey processes")
-    except Exception as e:
-        logger.debug(f"pkill result: {e}")
-    
-    # 确保 AutoKey 配置目录存在
-    try:
-        autokey_dir = Path('/home/headless/.config/autokey/data/MyScripts')
-        autokey_dir.mkdir(parents=True, exist_ok=True)
-    except:
-        pass
-    
-    # 启动 AutoKey
-    log_file = None
-    try:
-        log_file = open('/app/logs/autokey.log', 'a')
-        proc = subprocess.Popen(
-            ['autokey-gtk', '--verbose'],
-            env=env,
-            stdout=log_file,
-            stderr=log_file,
-            start_new_session=True
-        )
-        logger.info(f"🚀 AutoKey started with PID: {proc.pid}")
-    except Exception as e:
-        logger.error(f"❌ Failed to start AutoKey: {e}")
-        if log_file:
-            log_file.close()
-        return False
-    
-    # 等待 D-Bus 服务就绪
-    logger.info(f"⏳ Waiting for AutoKey D-Bus service (timeout={timeout}s)...")
-    for i in range(timeout):
-        time.sleep(1)
+    # 2. 使用 dbus-send 检查 AutoKey D-Bus 服务是否可用
+    def check_dbus_service():
         try:
             result = subprocess.run(
-                ['autokey-run', '-l'],
+                ['dbus-send', '--session', '--print-reply', '--dest=org.autokey.Service',
+                 '/AppService', 'org.autokey.Service.get_folder_contents', 'string:'],
                 env=env,
                 capture_output=True,
                 timeout=5
             )
-            if result.returncode == 0:
-                logger.info(f"✅ AutoKey is ready (waited {i+1}s)")
-                return True
+            return result.returncode == 0
         except:
-            pass
-        
-        # 检查进程是否存活
-        if proc.poll() is not None:
-            logger.error(f"❌ AutoKey process died with exit code: {proc.returncode}")
-            try:
-                # 尝试读取最后的日志
-                with open('/app/logs/autokey.log', 'r') as f:
-                    lines = f.readlines()[-20:]
-                    logger.error(f"📋 Last AutoKey logs: {''.join(lines)}")
-            except:
-                pass
             return False
-        
-        if i % 5 == 4:
-            logger.info(f"⏳ Still waiting for AutoKey... ({i+1}s)")
     
-    logger.error(f"❌ AutoKey did not become ready after {timeout}s")
+    # 3. 如果进程存在，等待 D-Bus 服务就绪
+    if autokey_running:
+        logger.info(f"⏳ Waiting for AutoKey D-Bus service (timeout={timeout}s)...")
+        for i in range(timeout):
+            if check_dbus_service():
+                logger.info(f"✅ AutoKey D-Bus service is ready (waited {i}s)")
+                return True
+            
+            if i % 5 == 4:
+                logger.info(f"⏳ Still waiting for AutoKey D-Bus... ({i+1}s)")
+            time.sleep(1)
+    
+    # 4. 如果进程不存在，尝试启动
+    if not autokey_running:
+        logger.info("🔄 AutoKey process not found, attempting to start...")
+        try:
+            log_file = open('/app/logs/autokey.log', 'a')
+            proc = subprocess.Popen(
+                ['autokey-gtk', '--verbose'],
+                env=env,
+                stdout=log_file,
+                stderr=log_file,
+                start_new_session=True
+            )
+            logger.info(f"🚀 AutoKey started with PID: {proc.pid}")
+            
+            # 等待新启动的 AutoKey 就绪
+            for i in range(timeout):
+                if check_dbus_service():
+                    logger.info(f"✅ AutoKey D-Bus service is ready (waited {i}s)")
+                    return True
+                
+                if proc.poll() is not None:
+                    logger.error(f"❌ AutoKey process died with exit code: {proc.returncode}")
+                    break
+                
+                if i % 5 == 4:
+                    logger.info(f"⏳ Still waiting for AutoKey D-Bus... ({i+1}s)")
+                time.sleep(1)
+        except Exception as e:
+            logger.error(f"❌ Failed to start AutoKey: {e}")
+    
+    # 5. 超时，输出诊断信息
+    logger.error(f"❌ AutoKey D-Bus service not ready after {timeout}s")
+    logger.info(f"📋 Current DBUS_SESSION_BUS_ADDRESS: {env.get('DBUS_SESSION_BUS_ADDRESS', 'NOT SET')}")
+    
+    # 尝试读取 autokey.log 获取更多信息
+    try:
+        with open('/app/logs/autokey.log', 'r') as f:
+            lines = f.readlines()[-20:]
+            if lines:
+                logger.error(f"📋 Last AutoKey logs:\n{''.join(lines)}")
+    except Exception as e:
+        logger.debug(f"Failed to read autokey.log: {e}")
+    
     return False
 
 def get_telegram_config():
