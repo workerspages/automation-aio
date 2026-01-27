@@ -480,15 +480,21 @@ def execute_script_core(task_id):
     success = False
     
     try:
-        # 优先识别 AutoKey (匹配 MyScripts 或 autokey/data)
-        if 'autokey/data' in script_path or 'MyScripts' in script_path:
-             # === 关键修复：传递完整文件名 (含后缀) ===
-             script_name = Path(script_path).name
-             print(f"🔄 Detected AutoKey script by path: {script_name}")
-             success = execute_autokey_script(script_name, task.name)
-             
+        # 判断脚本类型
+        is_in_autokey_dir = 'autokey/data' in script_path or 'MyScripts' in script_path
+        
+        # .autokey 后缀的脚本强制使用 AutoKey 执行（需要键盘模拟等功能）
+        if script_path.lower().endswith('.autokey'):
+            script_name = Path(script_path).name
+            logger.info(f"🔑 Running as AutoKey script (explicit): {script_name}")
+            success = execute_autokey_script(script_name, task.name)
+        
+        # .py 脚本：即使在 AutoKey 目录下也直接用 Python 执行（更稳定）
         elif script_path.lower().endswith('.py'):
-            print(f"🐍 Running as standard Python script: {script_path}")
+            if is_in_autokey_dir:
+                logger.info(f"🐍 Running AutoKey directory script directly with Python: {script_path}")
+            else:
+                logger.info(f"🐍 Running as standard Python script: {script_path}")
             success = execute_python_script(task.name, script_path)
             
         elif script_path.lower().endswith('.side'):
