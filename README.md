@@ -129,7 +129,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
 ```
 
 ### 3. 启动服务
@@ -266,7 +265,7 @@ A: 本镜像已内置 `--disable-dev-shm-usage` 参数绕过此限制，无需�
 1. **克隆代码**:
 
     ```bash
-    git clone https://github.com/workerspages/automation-aio.git
+    git clone https://github.com/workerspages/automation.git
     ```
 
 2. **准备依赖文件**:
@@ -279,13 +278,13 @@ A: 本镜像已内置 `--disable-dev-shm-usage` 参数绕过此限制，无需�
 3. **构建镜像**:
 
     ```bash
-    docker build -t automation-aio .
+    docker build -t automation .
     ```
 
     **构建多架构镜像 (AMD64 + ARM64)**:
 
     ```bash
-    docker buildx build --platform linux/amd64,linux/arm64 -t automation-aio --push .
+    docker buildx build --platform linux/amd64,linux/arm64 -t automation --push .
     ```
 
 ---
