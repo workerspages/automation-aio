@@ -74,7 +74,7 @@ version: '3.8'
 
 services:
   automation-slim-ai-captcha:
-    image: ghcr.io/workerspages/automation:slim-ai-captcha
+    image: ghcr.io/workerspages/automation:Slim-Ai-Captcha
     container_name: Automation-Slim-Ai-Captcha
     ports:
       - "8080:8080"
