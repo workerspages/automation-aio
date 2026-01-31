@@ -2,7 +2,7 @@ name: Build and Push Docker Image
 
 on:
   push:
-    branches: [ ai-captcha ]
+    branches: [ Slim-Ai-Captcha ]
     tags: [ "v*" ]
   workflow_dispatch: {}
 
