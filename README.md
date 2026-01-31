@@ -1,4 +1,4 @@
-# 🚀 Ubuntu Automation AIO (Ultra-Slim Edition)
+# 🚀 Automation Slim (Ai-Captcha）
 
 [![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow.svg)](https://www.python.org/)
