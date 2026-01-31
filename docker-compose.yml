@@ -28,8 +28,8 @@ services:
     # - MARIADB_PASSWORD=root
     # - MARIADB_DB=automation_slim
     # - MARIADB_DB=automation_slim
-    # - DB_SSL_ENABLED=true            # (可选) TiDB Serverless 等云数据库必须开启
-    # - DB_SSL_CA_PATH=/path/to/ca.crt # (可选) 自定义 CA 证书路径
+    # - DB_SSL_ENABLED=true                  # (可选) 极简模式 (仅需开启 SSL，使用默认系统证书)
+    # - DB_SSL_CA_PATH=/path/to/ca.crt       # (可选) 自定义 CA 证书路径 推荐
       # =======================================
 
       # === Telegram 通知配置 ===
