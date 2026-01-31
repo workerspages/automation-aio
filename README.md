@@ -62,7 +62,7 @@
 在服务器上创建一个目录用于存放项目文件：
 
 ```bash
-mkdir -p ubuntu-automation/data ubuntu-automation/logs ubuntu-automation/Downloads
+mkdir -p automation/data automation/logs automation/Downloads
 cd ubuntu-automation
 ```
 
@@ -74,8 +74,8 @@ version: '3.8'
 
 services:
   automation-aio:
-    image: ghcr.io/workerspages/automation-aio:aio
-    container_name: automation-aio
+    image: ghcr.io/workerspages/automation:aio
+    container_name: Automation-AIO
     ports:
       - "5000:5000"
     environment:
@@ -121,6 +121,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
 ```
 
 ### 3. 启动服务
@@ -199,7 +200,7 @@ docker-compose up -d
 
 1.  **克隆项目**:
     ```bash
-    git clone https://github.com/workerspages/automation-aio.git
+    git clone https://github.com/workerspages/automation.git
     cd ubuntu-automation
     ```
 
