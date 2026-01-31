@@ -74,7 +74,7 @@ version: '3.8'
 
 services:
   automation-aio:
-    image: ghcr.io/workerspages/automation:aio
+    image: ghcr.io/workerspages/automation:AIO
     container_name: Automation-AIO
     ports:
       - "5000:5000"
