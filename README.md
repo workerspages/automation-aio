@@ -60,7 +60,7 @@
 在你的服务器上执行：
 
 ```bash
-mkdir -p automation-aio/data automation-aio/logs automation-aio/Downloads
+mkdir -p automation/data automation/logs automation/Downloads
 cd automation-aio
 ```
 
