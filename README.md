@@ -6,7 +6,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)]()
 [![Database](https://img.shields.io/badge/Database-SQLite%20%7C%20MariaDB-orange)]()
 
-**Ubuntu Automation AIO (All-In-One)** 是一个基于 Docker 的全能自动化工控平台。它集成了一个完整的 Ubuntu 桌面环境、强大的 Web 管理面板、可视化任务调度器以及多种自动化工具（Selenium, Playwright, AutoKey, Actiona）。
+**Automation AIO (All-In-One)** 是一个基于 Docker 的全能自动化工控平台。它集成了一个完整的 Ubuntu 桌面环境、强大的 Web 管理面板、可视化任务调度器以及多种自动化工具（Selenium, Playwright, AutoKey, Actiona）。
 
 该项目旨在为开发者和自动化爱好者提供一个**开箱即用、防检测、支持远程管理**的自动化执行环境。
 
