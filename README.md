@@ -86,17 +86,19 @@ services:
       - ADMIN_PASSWORD=admin123
       - DISPLAY=:1                            # 显示面画在编号为 1 的虚拟显示器上 (请误修改)
       - MAX_SCRIPT_TIMEOUT=600                # 全局环境变量-如果你代码里的 sleep 时间超过了 600 秒，Flask 后端会认为任务卡死
-      - SWAP_SIZE_MB=512                      # Swap 交换空间大小 (MB)
+      - SWAP_SIZE_MB=1024                     # Swap 交换空间大小 (MB)
 
 
       # === 数据库配置 (可选：连接外部 MariaDB) ===
       # --- 数据库 (可选，留空默认使用内置 SQLite) ---
       # 如需外接 MariaDB/MySQL，请填写以下变量:
-    # - MARIADB_HOST= # 例如: 192.168.1.100
+    # - MARIADB_HOST=                                           # 例如: 192.168.1.100
     # - MARIADB_PORT=3306
     # - MARIADB_USER=root
     # - MARIADB_PASSWORD=root
     # - MARIADB_DB=automation_slim
+    # - DB_SSL_ENABLED=true                                     # (可选) 极简模式 (仅需开启 SSL，使用默认系统证书)
+    # - DB_SSL_CA_PATH=/etc/ssl/certs/ca-certificates.crt       # (可选) 自定义 CA 证书路径 推荐
       # =======================================
 
       # === Telegram 通知配置 ===
