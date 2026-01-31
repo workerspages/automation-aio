@@ -34,7 +34,15 @@ def get_database_uri():
         db_pass = os.environ.get('MARIADB_PASSWORD', '')
         db_port = os.environ.get('MARIADB_PORT', '3306')
         db_name = os.environ.get('MARIADB_DB', 'automation')
-        return f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
+        
+        uri = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
+        
+        # SSL Configuration (Required for TiDB Serverless)
+        if os.environ.get('DB_SSL_ENABLED', 'false').lower() == 'true':
+            # Use system CA bundle
+            uri += "&ssl_ca=/etc/ssl/certs/ca-certificates.crt&ssl_verify_cert=true&ssl_verify_identity=true"
+            
+        return uri
     return os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:////app/data/tasks.db')
 
 app.config['SQLALCHEMY_DATABASE_URI'] = get_database_uri()
