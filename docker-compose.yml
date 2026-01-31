@@ -15,6 +15,8 @@ services:
       - ADMIN_PASSWORD=admin123
       - DISPLAY=:1                            # 显示面画在编号为 1 的虚拟显示器上 (请误修改)
       - MAX_SCRIPT_TIMEOUT=600                # 全局环境变量-如果你代码里的 sleep 时间超过了 600 秒，Flask 后端会认为任务卡死
+      - SWAP_SIZE_MB=512                      # Swap 交换空间大小 (MB)
+
 
       # === 数据库配置 (可选：连接外部 MariaDB) ===
       # --- 数据库 (可选，留空默认使用内置 SQLite) ---

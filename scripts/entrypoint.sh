@@ -7,8 +7,9 @@ echo "==================================="
 
 # === PaaS Swap 优化 ===
 if [ ! -f /swapfile ] && [ -w / ]; then
-    echo "Creating 512MB swap file for PaaS optimization..."
-    dd if=/dev/zero of=/swapfile bs=1M count=512 2>/dev/null || true
+    SWAP_SIZE=${SWAP_SIZE_MB:-512}
+    echo "Creating ${SWAP_SIZE}MB swap file for PaaS optimization..."
+    dd if=/dev/zero of=/swapfile bs=1M count=${SWAP_SIZE} 2>/dev/null || true
     chmod 600 /swapfile 2>/dev/null || true
     mkswap /swapfile 2>/dev/null || true
     swapon /swapfile 2>/dev/null || true
