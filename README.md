@@ -73,7 +73,7 @@ version: '3.8'
 
 services:
   automation-slim:
-    image: ghcr.io/workerspages/automation:slim
+    image: ghcr.io/workerspages/automation:Slim
     container_name: Automation-Slim
     ports:
       - "8080:8080"
