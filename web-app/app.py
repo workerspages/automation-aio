@@ -590,6 +590,18 @@ def execute_autokey_script(script_name, task_name):
             start_pos = os.path.getsize('/app/logs/autokey.log')
     except: pass
     
+    # === 增强逻辑：服务健康检查与自动恢复 ===
+    try:
+        # 预检查：探测 AutoKey 服务是否存活
+        check_res = subprocess.run(['autokey-run', '-l'], capture_output=True, env=env, timeout=5)
+        if check_res.returncode != 0:
+            logger.warning("⚠️ AutoKey service seems down (check failed). Triggering self-healing...")
+            reload_autokey()
+            time.sleep(2) # 给一点额外缓冲
+    except Exception as e:
+        logger.error(f"AutoKey health check error: {e}")
+        reload_autokey()
+
     # 策略 1: 尝试完整文件名 (例如 test_browser.py)
     cmd = ['autokey-run', '-s', script_name]
     print(f"Running AutoKey (Try 1): {cmd}")
