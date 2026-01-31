@@ -39,8 +39,10 @@ def get_database_uri():
         
         # SSL Configuration (Required for TiDB Serverless)
         if os.environ.get('DB_SSL_ENABLED', 'false').lower() == 'true':
-            # Use system CA bundle
-            uri += "&ssl_ca=/etc/ssl/certs/ca-certificates.crt&ssl_verify_cert=true&ssl_verify_identity=true"
+            # Support custom CA path (defaults to system store)
+            ca_path = os.environ.get('DB_SSL_CA_PATH', '/etc/ssl/certs/ca-certificates.crt')
+            
+            uri += f"&ssl_ca={ca_path}&ssl_verify_cert=true&ssl_verify_identity=true"
             
         return uri
     return os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:////app/data/tasks.db')
