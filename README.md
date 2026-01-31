@@ -1,11 +1,11 @@
-# 🚀 Ubuntu Automation AIO (Ultra-Slim Edition)
+# 🚀 Automation Slim
 
 [![Docker](https://img.shields.io/badge/Docker-Enabled-blue.svg)](https://www.docker.com/)
 [![Python](https://img.shields.io/badge/Python-3.10+-yellow.svg)](https://www.python.org/)
 [![Size](https://img.shields.io/badge/Image%20Size-~500MB-green)](https://github.com/workerspages/automation-aio)
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)](LICENSE)
 
-**Ubuntu Automation AIO (Slim)** 是一个专为轻量化、高性能自动化任务设计的 Docker 工控平台。
+**Automation Slim** 是一个专为轻量化、高性能自动化任务设计的 Docker 工控平台。
 
 相比于传统的臃肿桌面镜像，本项目移除了 60% 以上的冗余组件（如 Firefox、Office 等），使用极简的 **Openbox** 窗口管理器替代了 XFCE。它在一个极其精简的容器内集成了 **Google Chrome**、**AutoKey**、**Python (Selenium/Playwright)** 以及一套可视化的 **Web 任务调度面板**。
 
