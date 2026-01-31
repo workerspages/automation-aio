@@ -37,12 +37,15 @@ def get_database_uri():
         
         uri = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
         
-        # SSL Configuration (Required for TiDB Serverless)
-        if os.environ.get('DB_SSL_ENABLED', 'false').lower() == 'true':
-            # Support custom CA path (defaults to system store)
-            ca_path = os.environ.get('DB_SSL_CA_PATH', '/etc/ssl/certs/ca-certificates.crt')
-            
-            uri += f"&ssl_ca={ca_path}&ssl_verify_cert=true&ssl_verify_identity=true"
+        # SSL Configuration
+        # Enable if explicitly set to true OR if a custom CA path is provided
+        ssl_enabled = os.environ.get('DB_SSL_ENABLED', 'false').lower() == 'true'
+        ca_path = os.environ.get('DB_SSL_CA_PATH')
+        
+        if ssl_enabled or ca_path:
+            # Defaults to system CA if not specified
+            final_ca_path = ca_path if ca_path else '/etc/ssl/certs/ca-certificates.crt'
+            uri += f"&ssl_ca={final_ca_path}&ssl_verify_cert=true&ssl_verify_identity=true"
             
         return uri
     return os.environ.get('SQLALCHEMY_DATABASE_URI', 'sqlite:////app/data/tasks.db')
