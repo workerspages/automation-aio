@@ -7,7 +7,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  IMAGE_NAME: automation-aio
+  IMAGE_NAME: automation
 
 jobs:
   build:
