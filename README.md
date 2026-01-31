@@ -72,9 +72,9 @@ cd automation-aio
 version: '3.8'
 
 services:
-  automation-aio:
-    image: ghcr.io/workerspages/automation-aio:paas
-    container_name: automation-aio
+  automation-slim:
+    image: ghcr.io/workerspages/automation:slim
+    container_name: Automation-Slim
     ports:
       - "8080:8080"
     environment:
@@ -94,7 +94,7 @@ services:
     # - MARIADB_PORT=3306
     # - MARIADB_USER=root
     # - MARIADB_PASSWORD=root
-    # - MARIADB_DB=automation_aio
+    # - MARIADB_DB=automation_slim
       # =======================================
 
       # === Telegram 通知配置 ===
@@ -129,6 +129,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
 ```
 
 ### 3. 启动服务
