@@ -29,6 +29,20 @@ else
     echo "❌ Chrome Not Found"
 fi
 
+# === 关键修复：清理 Chrome Profile 锁文件 ===
+# 在 PaaS/K8s 环境中，共享存储上的锁文件可能被旧容器遗留
+# 导致新容器无法启动 Chrome
+CHROME_CONFIG="/home/headless/.config/google-chrome"
+if [ -d "$CHROME_CONFIG" ]; then
+    echo "🧹 Cleaning Chrome profile locks..."
+    rm -f "$CHROME_CONFIG/SingletonLock" 2>/dev/null || true
+    rm -f "$CHROME_CONFIG/SingletonSocket" 2>/dev/null || true
+    rm -f "$CHROME_CONFIG/SingletonCookie" 2>/dev/null || true
+    # 清理崩溃恢复锁
+    rm -rf "$CHROME_CONFIG/Crash Reports/lock" 2>/dev/null || true
+    echo "✅ Chrome profile locks cleaned"
+fi
+
 # 2. VNC Pass
 mkdir -p /home/headless/.vnc
 chown headless:headless /home/headless/.vnc
