@@ -524,20 +524,24 @@ def get_desktop_env():
     env['DISPLAY'] = ':1'
     env['HOME'] = '/home/headless'
     env['USER'] = 'headless'
-    # 关键：确保 XAuthority 路径正确
     env['XAUTHORITY'] = '/home/headless/.Xauthority'
     
+    # 增强：支持多行 .dbus-env 文件解析
     dbus_file = Path('/home/headless/.dbus-env')
     if dbus_file.exists():
         try:
-            content = dbus_file.read_text().strip()
-            if content.startswith('export '):
-                parts = content.replace('export ', '').split('=', 1)
-                if len(parts) == 2:
-                    key = parts[0].strip()
-                    value = parts[1].strip().strip("'").strip('"')
-                    env[key] = value
-        except: pass
+            for line in dbus_file.read_text().strip().splitlines():
+                line = line.strip()
+                if line.startswith('export '):
+                    line = line[7:]  # 移除 'export '
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip().strip("'").strip('"')
+                    if key and value:
+                        env[key] = value
+        except Exception as e:
+            logger.warning(f"Failed to parse .dbus-env: {e}")
     return env
 
 def get_telegram_config():
@@ -560,6 +564,17 @@ def execute_selenium_script(task_name, script_path):
 def execute_python_script(task_name, script_path):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
+    
+    # 健康检查：确保 X11 显示可用（对于需要 GUI 的脚本至关重要）
+    try:
+        check = subprocess.run(['xdpyinfo'], env=env, capture_output=True, timeout=5)
+        if check.returncode != 0:
+            logger.warning(f"⚠️ X11 display not available, attempting to restart VNC...")
+            subprocess.run(['supervisorctl', 'restart', 'vncserver'], capture_output=True, timeout=30)
+            time.sleep(5)  # 等待 VNC 重启
+    except Exception as e:
+        logger.warning(f"X11 check skipped: {e}")
+    
     try:
         cmd = [sys.executable, script_path]
         print(f"Running command: {cmd}")

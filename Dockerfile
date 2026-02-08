@@ -82,12 +82,27 @@ RUN apt-get update && \
       apt-get install -y /tmp/chrome.deb; \
       rm /tmp/chrome.deb; \
       mv /usr/bin/google-chrome-stable /usr/bin/google-chrome-stable.original; \
+      # === 预装 ChromeDriver (避免运行时下载) ===
+      echo "🔧 Installing ChromeDriver for AMD64..."; \
+      CHROME_VERSION=$(google-chrome-stable.original --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+\.\d+' | head -1 || echo "131.0.6778.264"); \
+      CHROME_MAJOR=$(echo $CHROME_VERSION | cut -d. -f1); \
+      DRIVER_URL="https://storage.googleapis.com/chrome-for-testing-public/${CHROME_VERSION}/linux64/chromedriver-linux64.zip"; \
+      wget -q "$DRIVER_URL" -O /tmp/chromedriver.zip 2>/dev/null || \
+      wget -q "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_${CHROME_MAJOR}" -O /tmp/driver_version && \
+      wget -q "https://chromedriver.storage.googleapis.com/$(cat /tmp/driver_version)/chromedriver_linux64.zip" -O /tmp/chromedriver.zip; \
+      unzip -q /tmp/chromedriver.zip -d /tmp/; \
+      mv /tmp/chromedriver-linux64/chromedriver /usr/bin/chromedriver 2>/dev/null || mv /tmp/chromedriver /usr/bin/chromedriver; \
+      chmod +x /usr/bin/chromedriver; \
+      rm -rf /tmp/chromedriver* /tmp/driver_version; \
+      echo "✅ ChromeDriver installed: $(/usr/bin/chromedriver --version 2>/dev/null || echo 'installed')"; \
   elif [ "$TARGETARCH" = "arm64" ]; then \
       echo "🟠 Installing Chromium for ARM64 (using xtradeb PPA)..."; \
       add-apt-repository -y ppa:xtradeb/apps; \
       apt-get update; \
-      apt-get install -y chromium; \
+      apt-get install -y chromium chromium-driver; \
       ln -s /usr/bin/chromium /usr/bin/google-chrome-stable.original; \
+      ln -sf /usr/bin/chromedriver /usr/bin/chromedriver 2>/dev/null || true; \
+      echo "✅ Chromium + ChromeDriver installed for ARM64"; \
   else \
       echo "❌ Unsupported architecture: $TARGETARCH"; exit 1; \
   fi && \

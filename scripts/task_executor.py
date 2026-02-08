@@ -118,8 +118,17 @@ class SeleniumIDEExecutor:
             options.add_experimental_option('useAutomationExtension', False)
             options.add_argument('user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
             
-            # 强制使用 Chrome，不尝试其他浏览器
-            service = Service(ChromeDriverManager().install())
+            # 优先使用系统预装的 chromedriver，避免每次下载
+            chromedriver_path = '/usr/bin/chromedriver'
+            if os.path.exists(chromedriver_path):
+                logger.info(f"Using system chromedriver: {chromedriver_path}")
+                service = Service(chromedriver_path)
+            else:
+                # Fallback: 使用 webdriver-manager，启用本地缓存
+                logger.info("System chromedriver not found, using webdriver-manager...")
+                os.environ['WDM_LOCAL'] = '1'
+                os.environ['WDM_LOG_LEVEL'] = '0'
+                service = Service(ChromeDriverManager().install())
             self.driver = webdriver.Chrome(service=service, options=options)
             self.driver.maximize_window()
             self.driver.implicitly_wait(10)
