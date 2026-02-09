@@ -7,7 +7,7 @@ on:
   workflow_dispatch: {}
 
 env:
-  # 你的镜像名称，最终会变成: docker-hub.zeabur.app/automation-aio
+  # 你的镜像名称，最终会变成: docker-hub.zeabur.app/automation-slim
   IMAGE_NAME: automation
 
 jobs:
