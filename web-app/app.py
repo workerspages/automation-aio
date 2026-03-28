@@ -96,7 +96,19 @@ scheduler.add_job(
     replace_existing=True
 )
 
-scheduler = BackgroundScheduler(timezone=SYSTEM_TZ, job_defaults=job_defaults)
+# [FIX] 添加调度器事件监听，用于调试任务触发问题
+from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR, EVENT_JOB_MISSED
+def scheduler_event_listener(event):
+    import logging as _log
+    _logger = _log.getLogger('scheduler')
+    if event.exception:
+        _logger.error(f"❌ Job {event.job_id} raised an exception: {event.exception}")
+    elif hasattr(event, 'code') and event.code == EVENT_JOB_MISSED:
+        _logger.warning(f"⚠️ Job {event.job_id} was MISSED at {event.scheduled_run_time}")
+    else:
+        _logger.info(f"✅ Job {event.job_id} executed successfully at {event.scheduled_run_time}")
+
+scheduler.add_listener(scheduler_event_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED)
 scheduler.start()
 
 task_executor_pool = ThreadPoolExecutor(max_workers=1)
