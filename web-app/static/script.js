@@ -39,6 +39,8 @@ function openAddModal() {
     const cronRadio = document.querySelector('input[name="scheduleType"][value="cron"]');
     if (cronRadio) cronRadio.checked = true;
     toggleScheduleInputs();
+    
+    document.getElementById('taskTimeout').value = '600';
 
     updateScriptOptions().then(() => {
         document.getElementById('taskModal').style.display = 'block';
@@ -81,6 +83,8 @@ function editTask(taskId) {
             const scheduleType = task.schedule_type || 'cron';
             const radio = document.querySelector(`input[name="scheduleType"][value="${scheduleType}"]`);
             if (radio) radio.checked = true;
+            
+            document.getElementById('taskTimeout').value = task.timeout || 600;
 
             if (scheduleType === 'random') {
                 document.getElementById('randomStart').value = task.random_start || '';
@@ -111,7 +115,8 @@ function saveTask(event) {
         name: document.getElementById('taskName').value,
         script_path: document.getElementById('scriptPath').value,
         enabled: true,
-        schedule_type: scheduleType
+        schedule_type: scheduleType,
+        timeout: parseInt(document.getElementById('taskTimeout').value) || 600
     };
 
     if (scheduleType === 'random') {

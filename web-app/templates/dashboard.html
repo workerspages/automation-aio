@@ -53,6 +53,7 @@
             </div>
             <div class="task-info">
                 <p><strong>脚本</strong> {{ task.script_path }}</p>
+                <p><strong>超时时间</strong> {{ task.timeout if task.timeout else 600 }} 秒</p>
                 <p><strong>调度</strong> 
                     {% if task.schedule_type == 'random' %}
                         <span class="tag-random">🎲 随机</span> {{ task.random_start }} - {{ task.random_end }}
@@ -91,6 +92,7 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="form-group"><label>超时时长 (秒)</label><input type="number" id="taskTimeout" placeholder="600" value="600" required /></div>
             <div class="form-group">
                 <label>模式</label>
                 <div class="radio-group">

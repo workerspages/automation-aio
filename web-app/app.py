@@ -115,6 +115,7 @@ class Task(db.Model):
     last_run = db.Column(db.DateTime)
     last_status = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.now)
+    timeout = db.Column(db.Integer, default=600)
     
     schedule_type = db.Column(db.String(20), default='cron') 
     random_start = db.Column(db.String(10), nullable=True)   
@@ -334,7 +335,8 @@ def manage_tasks():
             enabled=data.get('enabled', True),
             schedule_type=schedule_type,
             random_start=random_start,
-            random_end=random_end
+            random_end=random_end,
+            timeout=data.get('timeout', 600)
         )
         db.session.add(task)
         db.session.commit()
@@ -354,7 +356,8 @@ def manage_tasks():
             'last_status': t.last_status,
             'schedule_type': getattr(t, 'schedule_type', 'cron'),
             'random_start': getattr(t, 'random_start', ''),
-            'random_end': getattr(t, 'random_end', '')
+            'random_end': getattr(t, 'random_end', ''),
+            'timeout': getattr(t, 'timeout', 600)
         } for t in tasks
     ])
 
@@ -375,7 +378,8 @@ def update_task(task_id):
             'last_status': task.last_status,
             'schedule_type': getattr(task, 'schedule_type', 'cron'),
             'random_start': getattr(task, 'random_start', ''),
-            'random_end': getattr(task, 'random_end', '')
+            'random_end': getattr(task, 'random_end', ''),
+            'timeout': getattr(task, 'timeout', 600)
         })
     
     if request.method == 'DELETE':
@@ -389,6 +393,7 @@ def update_task(task_id):
         data = request.json
         task.name = data.get('name', task.name)
         task.enabled = data.get('enabled', task.enabled)
+        task.timeout = data.get('timeout', task.timeout)
         
         schedule_type = data.get('schedule_type', 'cron')
         task.schedule_type = schedule_type
@@ -486,19 +491,22 @@ def execute_script_core(task_id):
     success = False
     
     try:
+        task_timeout = getattr(task, 'timeout', 600)
+        if not task_timeout: task_timeout = 600
+        
         # 优先识别 AutoKey (匹配 MyScripts 或 autokey/data)
         if 'autokey/data' in script_path or 'MyScripts' in script_path:
              # === 关键修复：传递完整文件名 (含后缀) ===
              script_name = Path(script_path).name
              print(f"🔄 Detected AutoKey script by path: {script_name}")
-             success = execute_autokey_script(script_name, task.name)
+             success = execute_autokey_script(script_name, task.name, timeout_sec=task_timeout)
              
         elif script_path.lower().endswith('.py'):
             print(f"🐍 Running as standard Python script: {script_path}")
-            success = execute_python_script(task.name, script_path)
+            success = execute_python_script(task.name, script_path, timeout_sec=task_timeout)
             
         elif script_path.lower().endswith('.side'):
-            success = execute_selenium_script(task.name, script_path)
+            success = execute_selenium_script(task.name, script_path, timeout_sec=task_timeout)
         else:
             logger.error(f"Unsupported script type: {script_path}")
             success = False
@@ -547,12 +555,13 @@ def get_desktop_env():
 def get_telegram_config():
     return os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
 
-def execute_selenium_script(task_name, script_path):
+def execute_selenium_script(task_name, script_path, timeout_sec=600):
     from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification, send_email_notification
     bot_token, chat_id = get_telegram_config()
     os.environ.update(get_desktop_env())
     try:
         executor = SeleniumIDEExecutor(script_path)
+        # Note: Need to modify SeleniumIDEExecutor to support timeout if absolutely necessary.
         success, message = executor.execute()
         if bot_token and chat_id: send_telegram_notification(f"{task_name} (Selenium)", success, message, bot_token, chat_id)
         send_email_notification(f"{task_name} (Selenium)", success, message)
@@ -561,7 +570,7 @@ def execute_selenium_script(task_name, script_path):
         logger.error(f"Selenium Error: {e}")
         return False
 
-def execute_python_script(task_name, script_path):
+def execute_python_script(task_name, script_path, timeout_sec=600):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
     
@@ -578,7 +587,6 @@ def execute_python_script(task_name, script_path):
     try:
         cmd = [sys.executable, script_path]
         print(f"Running command: {cmd}")
-        timeout_sec = int(os.environ.get('MAX_SCRIPT_TIMEOUT', 600))
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec, env=env)
         
         success = result.returncode == 0
@@ -606,7 +614,7 @@ def execute_python_script(task_name, script_path):
         logger.error(f"Python Exception: {e}")
         return False
 
-def execute_autokey_script(script_name, task_name):
+def execute_autokey_script(script_name, task_name, timeout_sec=600):
     bot_token, chat_id = get_telegram_config()
     env = get_desktop_env()
     log_msg = ""
@@ -634,7 +642,6 @@ def execute_autokey_script(script_name, task_name):
     # 策略 1: 尝试完整文件名 (例如 test_browser.py)
     cmd = ['autokey-run', '-s', script_name]
     print(f"Running AutoKey (Try 1): {cmd}")
-    timeout_sec = int(os.environ.get('MAX_SCRIPT_TIMEOUT', 600))
     # 为保证稳定，我们对挂着的部分加上 timeout 处理
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec, env=env)
@@ -785,6 +792,12 @@ def schedule_task(task):
 
 def initialize_system():
     with app.app_context():
+        try:
+            db.session.execute(text("ALTER TABLE task ADD COLUMN timeout INTEGER DEFAULT 600"))
+            db.session.commit()
+        except:
+            db.session.rollback()
+        
         try:
             admin_user = os.environ.get('ADMIN_USERNAME', 'admin')
             admin_pass = os.environ.get('ADMIN_PASSWORD', 'admin123')
