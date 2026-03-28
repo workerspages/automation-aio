@@ -121,6 +121,13 @@ class Task(db.Model):
     random_start = db.Column(db.String(10), nullable=True)   
     random_end = db.Column(db.String(10), nullable=True)     
 
+class ScriptFile(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    folder = db.Column(db.String(50), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
 @login_manager.user_loader
 def load_user(user_id):
     return db.session.get(User, int(user_id))
@@ -234,6 +241,15 @@ def save_file():
         # 1. 保存脚本文件
         file_path.write_text(content, encoding='utf-8')
         
+        # [NEW] 同步保存到外部数据库
+        script_record = ScriptFile.query.filter_by(folder=folder, filename=filename).first()
+        if script_record:
+            script_record.content = content
+        else:
+            script_record = ScriptFile(folder=folder, filename=filename, content=content)
+            db.session.add(script_record)
+        db.session.commit()
+        
         # 2. [AutoKey 特殊处理] 自动生成 .json 定义文件
         if folder == 'autokey' and filename.endswith('.py'):
             json_path = file_path.with_suffix('.json')
@@ -278,6 +294,13 @@ def delete_file():
                 if json_path.exists():
                     os.remove(json_path)
                 reload_autokey()
+            
+            # [NEW] 同步删除外部数据库记录
+            script_record = ScriptFile.query.filter_by(folder=folder, filename=filename).first()
+            if script_record:
+                db.session.delete(script_record)
+                db.session.commit()
+                
             return jsonify({'success': True})
         except Exception as e:
             return jsonify({'error': str(e)}), 500
@@ -792,11 +815,46 @@ def schedule_task(task):
 
 def initialize_system():
     with app.app_context():
+        # [NEW] 创建可能缺失的表 (比如新的 ScriptFile)
+        db.create_all()
+        
         try:
             db.session.execute(text("ALTER TABLE task ADD COLUMN timeout INTEGER DEFAULT 600"))
             db.session.commit()
         except:
             db.session.rollback()
+            
+        # [NEW] 重启/初次启动时，从数据库恢复所有脚本到本地临时文件系统
+        try:
+            script_files = ScriptFile.query.all()
+            for record in script_files:
+                target_dir = get_target_dir(record.folder)
+                target_dir.mkdir(parents=True, exist_ok=True)
+                file_path = target_dir / record.filename
+                # 写入文件代码
+                file_path.write_text(record.content, encoding='utf-8')
+                
+                # 如果是 autokey 脚本，还需要恢复 .json 定义文件才能被系统识别
+                if record.folder == 'autokey' and record.filename.endswith('.py'):
+                    json_path = file_path.with_suffix('.json')
+                    if not json_path.exists():
+                        script_config = {
+                            "type": "script",
+                            "description": record.filename,
+                            "store": {},
+                            "modes": [3],
+                            "usageCount": 0,
+                            "prompt": False,
+                            "omitTrigger": False,
+                            "showInTrayMenu": False,
+                            "filter": None,
+                            "hotkey": {"hotKey": None, "modifiers": []}
+                        }
+                        json_path.write_text(json.dumps(script_config, indent=4), encoding='utf-8')
+            if script_files:
+                logger.info(f"✅ Synced {len(script_files)} script files from database to local filesystem.")
+        except Exception as e:
+            logger.error(f"Error restoring scripts from database: {e}")
         
         try:
             admin_user = os.environ.get('ADMIN_USERNAME', 'admin')
