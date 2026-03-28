@@ -786,7 +786,8 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
         return False
     
     # 策略 2: 如果失败，尝试去掉后缀 (例如 test_browser)
-    if result_code != 0 and script_name.endswith('.py'):
+    # 注意：如果 result_code < 0 (例如 -9)，说明是被抢占机制强杀了，绝对不能死灰复燃触发重试！
+    if result_code != 0 and result_code >= 0 and script_name.endswith('.py'):
         stem = Path(script_name).stem
         cmd_retry = ['autokey-run', '-s', stem]
         print(f"Running AutoKey (Try 2): {cmd_retry}")
@@ -836,7 +837,7 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
     log_msg = log_msg.strip() or "No output captured."
     
     if success: logger.info(f"AutoKey {script_name} Success")
-    else: logger.error(f"AutoKey Failed: {result.stderr}")
+    else: logger.error(f"AutoKey Failed: {stderr_final}")
     
     from scripts.task_executor import send_telegram_notification, send_email_notification
     if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", success, log_msg, bot_token, chat_id)
