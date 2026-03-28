@@ -29,6 +29,7 @@
     <div class="nav-content">
         <div class="logo"><span class="icon">🚀</span><h1>Automation Slim</h1></div>
         <div class="nav-links">
+            <button class="logout-btn" onclick="backupBrowserState()" style="color: #ff8906; border-color: rgba(255, 137, 6, 0.5);">💾 备份浏览器登录状态</button>
             <button class="logout-btn" onclick="openFileManager()">📂 脚本管理</button>
             <a href="/vnc/vnc.html?path=vnc/websockify" target="_blank" class="logout-btn">🖥️ 远程桌面</a>
             <a href="{{ url_for('logout') }}" class="logout-btn">退出</a>

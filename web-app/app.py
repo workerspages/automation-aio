@@ -58,6 +58,25 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
+def auto_backup_browser_state():
+    try:
+        from scripts.browser_sync import backup_browser_profile
+        zip_bytes = backup_browser_profile()
+        if zip_bytes:
+            with app.app_context():
+                record = BrowserProfile.query.first()
+                if not record:
+                    record = BrowserProfile(profile_data=zip_bytes)
+                    db.session.add(record)
+                else:
+                    record.profile_data = zip_bytes
+                db.session.commit()
+            import logging
+            logging.info("🚗 Auto-backup of browser state completed.")
+    except Exception as e:
+        import logging
+        logging.getLogger().error(f"Auto-backup browser state failed: {e}")
+
 # --- 调度器配置 ---
 SYSTEM_TZ_STR = os.environ.get('TZ', 'Asia/Shanghai')
 SYSTEM_TZ = pytz.timezone(SYSTEM_TZ_STR)
@@ -68,6 +87,15 @@ job_defaults = {
     'max_instances': 3
 }
 scheduler = BackgroundScheduler(timezone=SYSTEM_TZ, job_defaults=job_defaults)
+# 追加浏览器凭据每 2 小时自动云端快照
+scheduler.add_job(
+    func=auto_backup_browser_state,
+    trigger=CronTrigger(minute=0, hour='*/2'),  # Every 2 hours
+    id='auto_browser_backup',
+    name='Backup Browser State to DB',
+    replace_existing=True
+)
+
 scheduler.start()
 
 task_executor_pool = ThreadPoolExecutor(max_workers=5)
@@ -126,6 +154,11 @@ class ScriptFile(db.Model):
     folder = db.Column(db.String(50), nullable=False)
     filename = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+class BrowserProfile(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    profile_data = db.Column(db.LargeBinary)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
 @login_manager.user_loader
@@ -333,6 +366,27 @@ def get_available_scripts():
                 logger.error(f"Error scanning dir {dir_path}: {e}")
                 
     return scripts
+
+@app.route('/api/browser/backup', methods=['POST'])
+@login_required
+def manual_browser_backup():
+    try:
+        from scripts.browser_sync import backup_browser_profile
+        zip_bytes = backup_browser_profile()
+        if zip_bytes:
+            with app.app_context():
+                record = BrowserProfile.query.first()
+                if not record:
+                    record = BrowserProfile(profile_data=zip_bytes)
+                    db.session.add(record)
+                else:
+                    record.profile_data = zip_bytes
+                db.session.commit()
+            return jsonify({'success': True, 'message': 'Browser state backed up successfully to cloud db.'})
+        return jsonify({'error': 'No profile files found'}), 404
+    except Exception as e:
+        logger.error(f"Manual browser backup failed: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/tasks', methods=['GET', 'POST'])
 @login_required
@@ -855,6 +909,16 @@ def initialize_system():
                 logger.info(f"✅ Synced {len(script_files)} script files from database to local filesystem.")
         except Exception as e:
             logger.error(f"Error restoring scripts from database: {e}")
+            
+        # [NEW] 恢复云端保存的浏览器 Profile 数据 (Cookie, Localstorage)
+        try:
+            browser_record = BrowserProfile.query.first()
+            if browser_record and browser_record.profile_data:
+                from scripts.browser_sync import restore_browser_profile
+                if restore_browser_profile(browser_record.profile_data):
+                    logger.info("✅ Synced browser profile state from database.")
+        except Exception as e:
+            logger.error(f"Error restoring browser profile from database: {e}")
         
         try:
             admin_user = os.environ.get('ADMIN_USERNAME', 'admin')

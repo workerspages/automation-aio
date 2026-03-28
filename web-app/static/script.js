@@ -203,6 +203,18 @@ function updateCronHelp(expression) {
 
 // --- 脚本管理器与编辑器 ---
 
+function backupBrowserState() {
+    if (!confirm('您确定要将当前 Chrome 浏览器的 Cookie 和本地缓存状态备份到数据库云端吗？\r\n（建议在通过远程桌面成功登录目标网站后执行此操作）')) return;
+    
+    fetch('/api/browser/backup', { method: 'POST' })
+        .then(r => r.json())
+        .then(res => {
+            if (res.success) alert(res.message);
+            else alert('备份失败: ' + res.error);
+        })
+        .catch(err => alert('网络异常: ' + err));
+}
+
 function openFileManager() {
     currentFolder = 'downloads';
     switchFolder('downloads');
