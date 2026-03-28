@@ -695,7 +695,7 @@ def execute_python_script(task_name, script_path, timeout_sec=600):
     try:
         cmd = [sys.executable, script_path]
         print(f"Running command: {cmd}")
-        p = subprocess.Popen(cmd, capture_output=True, text=True, env=env)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         
         with active_process_lock:
             ACTIVE_PROCESSES.append(p)
@@ -764,7 +764,7 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
     print(f"Running AutoKey (Try 1): {cmd}")
     # 为保证稳定，我们对挂着的部分加上 timeout 处理
     try:
-        p1 = subprocess.Popen(cmd, capture_output=True, text=True, env=env)
+        p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         with active_process_lock: ACTIVE_PROCESSES.append(p1)
         try:
             stdout1, stderr1 = p1.communicate(timeout=timeout_sec)
@@ -790,7 +790,7 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
         cmd_retry = ['autokey-run', '-s', stem]
         print(f"Running AutoKey (Try 2): {cmd_retry}")
         try:
-            p2 = subprocess.Popen(cmd_retry, capture_output=True, text=True, env=env)
+            p2 = subprocess.Popen(cmd_retry, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
             with active_process_lock: ACTIVE_PROCESSES.append(p2)
             try:
                 stdout2, stderr2 = p2.communicate(timeout=timeout_sec)
