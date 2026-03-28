@@ -61,7 +61,7 @@
 
 ```bash
 mkdir -p automation/data automation/logs automation/Downloads
-cd automation-aio
+cd automation
 ```
 
 ### 2. 创建配置文件
@@ -118,7 +118,7 @@ services:
       # === Cloudflare Tunnel 配置 ===
       # 必须提供 Token，否则脚本会报错并跳过启动  开启:true 关闭:false 
       - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+      - CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token-here
       - APP_PUBLIC_DOMAIN=                                         # Cloudflare Tunnel后台配置的域名
     volumes:
       - ./Downloads:/home/headless/Downloads
@@ -161,7 +161,7 @@ docker-compose up -d
 
 * **界面布局**:
   * 你会看到一个 **纯色背景**（通常是深灰色），这**不是**死机了，而是 Openbox 的极简风格。
-  * 屏幕底部有一个细长的任务栏 (`tint2`)，显示当前打开的窗口和时间。
+  * 屏幕顶部有一个细长的任务栏 (`tint2`)，显示当前打开的窗口和时间。
   * 右下角托盘区应该能看到红色的 **AutoKey 图标**。
 
 * **如何打开菜单？**

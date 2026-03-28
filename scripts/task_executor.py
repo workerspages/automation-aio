@@ -179,7 +179,22 @@ class SeleniumIDEExecutor:
                     time.sleep(random.uniform(0.05, 0.15))
             elif cmd == 'sendKeys':
                 el = self.find_element(target)
-                el.send_keys(Keys.ENTER if value == '${KEY_ENTER}' else value)
+                key_map = {
+                    '${KEY_ENTER}': Keys.ENTER,
+                    '${KEY_TAB}': Keys.TAB,
+                    '${KEY_ESCAPE}': Keys.ESCAPE,
+                    '${KEY_BACKSPACE}': Keys.BACKSPACE,
+                    '${KEY_DELETE}': Keys.DELETE,
+                    '${KEY_UP}': Keys.ARROW_UP,
+                    '${KEY_DOWN}': Keys.ARROW_DOWN,
+                    '${KEY_LEFT}': Keys.ARROW_LEFT,
+                    '${KEY_RIGHT}': Keys.ARROW_RIGHT,
+                    '${KEY_HOME}': Keys.HOME,
+                    '${KEY_END}': Keys.END,
+                    '${KEY_PAGE_UP}': Keys.PAGE_UP,
+                    '${KEY_PAGE_DOWN}': Keys.PAGE_DOWN,
+                }
+                el.send_keys(key_map.get(value, value))
             elif cmd == 'select':
                 from selenium.webdriver.support.select import Select
                 select = Select(self.find_element(target))
@@ -187,13 +202,18 @@ class SeleniumIDEExecutor:
                 elif value.startswith('value='): select.select_by_value(value[6:])
                 else: select.select_by_visible_text(value)
             elif cmd == 'pause':
-                time.sleep(int(value) / 1000)
+                try:
+                    time.sleep(int(value) / 1000)
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid pause value: '{value}', skipping")
             elif cmd == 'store':
                 self.variables[value] = target
             elif cmd == 'storeText':
                 self.variables[value] = self.find_element(target).text
             elif cmd == 'executeScript':
-                self.driver.execute_script(target)
+                result = self.driver.execute_script(target)
+                if value:  # Selenium IDE 用 value 字段指定存储变量名
+                    self.variables[value] = result
             
             return True
         except Exception as e:

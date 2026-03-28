@@ -8,7 +8,7 @@ def check_env():
     token = os.environ.get('TELEGRAM_BOT_TOKEN')
     chat_id = os.environ.get('TELEGRAM_CHAT_ID')
     
-    print(f"TELEGRAM_BOT_TOKEN: {'Set' if token else 'Missing'} ({token[:5]}... if set)")
+    print(f"TELEGRAM_BOT_TOKEN: {'Set (' + token[:5] + '...)' if token else 'Missing'}")
     print(f"TELEGRAM_CHAT_ID: {'Set' if chat_id else 'Missing'}")
     
     return token, chat_id

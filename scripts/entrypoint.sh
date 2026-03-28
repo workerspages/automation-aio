@@ -51,7 +51,6 @@ chmod 600 /home/headless/.vnc/passwd
 
 # 3. 权限修正
 mkdir -p "/home/headless/.config/autokey/data/My Phrases"
-mkdir -p "/home/headless/.config/autokey/data/My Phrases"
 mkdir -p "/home/headless/.config/autokey/data/Sample Scripts"
 mkdir -p "/home/headless/.config/autokey/data/MyScripts"
 chown -R headless:headless /home/headless/.config

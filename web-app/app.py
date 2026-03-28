@@ -24,7 +24,12 @@ from werkzeug.utils import secure_filename
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-this')
+_secret_key = os.environ.get('SECRET_KEY', '')
+if not _secret_key:
+    import warnings
+    warnings.warn('⚠️ SECRET_KEY 未设置，正在使用不安全的默认值，请配置环境变量！', stacklevel=1)
+    _secret_key = 'dev-secret-key-change-this'
+app.config['SECRET_KEY'] = _secret_key
 
 # --- 数据库连接配置 ---
 def get_database_uri():
@@ -84,7 +89,7 @@ SYSTEM_TZ = pytz.timezone(SYSTEM_TZ_STR)
 job_defaults = {
     'misfire_grace_time': 3600,
     'coalesce': True,
-    'max_instances': 3
+    'max_instances': 1  # 与单线程抢占式执行设计保持一致
 }
 scheduler = BackgroundScheduler(timezone=SYSTEM_TZ, job_defaults=job_defaults)
 # 追加浏览器凭据每 2 小时自动云端快照
@@ -96,19 +101,24 @@ scheduler.add_job(
     replace_existing=True
 )
 
-# [FIX] 添加调度器事件监听，用于调试任务触发问题
+# [FIX] 调度器事件监听，用于调试任务触发问题
 from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR, EVENT_JOB_MISSED
-def scheduler_event_listener(event):
+
+def _on_job_executed(event):
     import logging as _log
     _logger = _log.getLogger('scheduler')
-    if event.exception:
+    if hasattr(event, 'exception') and event.exception:
         _logger.error(f"❌ Job {event.job_id} raised an exception: {event.exception}")
-    elif hasattr(event, 'code') and event.code == EVENT_JOB_MISSED:
-        _logger.warning(f"⚠️ Job {event.job_id} was MISSED at {event.scheduled_run_time}")
     else:
         _logger.info(f"✅ Job {event.job_id} executed successfully at {event.scheduled_run_time}")
 
-scheduler.add_listener(scheduler_event_listener, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR | EVENT_JOB_MISSED)
+def _on_job_missed(event):
+    import logging as _log
+    _logger = _log.getLogger('scheduler')
+    _logger.warning(f"⚠️ Job {event.job_id} was MISSED at {event.scheduled_run_time}")
+
+scheduler.add_listener(_on_job_executed, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
+scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
 scheduler.start()
 
 task_executor_pool = ThreadPoolExecutor(max_workers=1)
@@ -237,7 +247,7 @@ def dashboard():
 
 @app.route('/favicon.ico')
 def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+    return '', 204  # 无 favicon 文件，返回 No Content 避免 404
 
 @app.route('/health')
 def health():
@@ -677,15 +687,41 @@ def get_telegram_config():
     return os.environ.get('TELEGRAM_BOT_TOKEN'), os.environ.get('TELEGRAM_CHAT_ID')
 
 def execute_selenium_script(task_name, script_path, timeout_sec=600):
-    from scripts.task_executor import SeleniumIDEExecutor, send_telegram_notification, send_email_notification
+    """通过子进程执行 Selenium IDE 脚本，避免阻塞 Flask worker 和污染全局环境"""
     bot_token, chat_id = get_telegram_config()
-    os.environ.update(get_desktop_env())
+    env = get_desktop_env()  # 仅传递给子进程，不污染全局 os.environ
+    
     try:
-        executor = SeleniumIDEExecutor(script_path)
-        # Note: Need to modify SeleniumIDEExecutor to support timeout if absolutely necessary.
-        success, message = executor.execute()
-        if bot_token and chat_id: send_telegram_notification(f"{task_name} (Selenium)", success, message, bot_token, chat_id)
-        send_email_notification(f"{task_name} (Selenium)", success, message)
+        cmd = [sys.executable, '-m', 'scripts.task_executor', script_path]
+        # 如果有 Telegram 配置，通过命令行参数传递
+        if bot_token and chat_id:
+            cmd.extend([bot_token, chat_id])
+        
+        logger.info(f"Running Selenium script as subprocess: {script_path}")
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, 
+                            text=True, env=env, cwd='/app')
+        
+        with active_process_lock:
+            ACTIVE_PROCESSES.append(p)
+        
+        try:
+            stdout, stderr = p.communicate(timeout=timeout_sec)
+            success = p.returncode == 0
+            log_msg = (stdout + "\n" + stderr).strip() or "No output"
+        except subprocess.TimeoutExpired:
+            p.kill()
+            success = False
+            log_msg = f"Selenium script timeout ({timeout_sec}s)"
+        finally:
+            with active_process_lock:
+                if p in ACTIVE_PROCESSES: ACTIVE_PROCESSES.remove(p)
+        
+        if success: logger.info(f"Selenium {task_name} Success")
+        else: logger.error(f"Selenium {task_name} Failed: {log_msg[:200]}")
+        
+        from scripts.task_executor import send_telegram_notification, send_email_notification
+        if bot_token and chat_id: send_telegram_notification(f"{task_name} (Selenium)", success, log_msg, bot_token, chat_id)
+        send_email_notification(f"{task_name} (Selenium)", success, log_msg)
         return success
     except Exception as e:
         logger.error(f"Selenium Error: {e}")
@@ -868,7 +904,7 @@ def reload_autokey():
         # 2. Restart (headless environment)
         env = get_desktop_env()
         
-        # redirect autokey output to log file
+        # redirect autokey output to log file (使用 context manager 避免句柄泄漏)
         log_file = open('/app/logs/autokey.log', 'a')
         
         pro = subprocess.Popen(['autokey-gtk', '--verbose'], 
@@ -876,6 +912,9 @@ def reload_autokey():
                          stdout=log_file, 
                          stderr=log_file,
                          start_new_session=True)
+        
+        # 子进程已拿到 fd 副本，父进程可以安全关闭自己的句柄
+        log_file.close()
         
         # 3. Wait for DBus service polling
         logger.info("⏳ Waiting for AutoKey DBus service...")

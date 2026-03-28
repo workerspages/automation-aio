@@ -2,7 +2,7 @@ name: Build and Push to Private Registry Only
 
 on:
   push:
-    branches: [  ]
+    branches: []  # 留空: 仅通过 tag push 或手动 workflow_dispatch 触发
     tags: [ "v*" ]
   workflow_dispatch: {}
 

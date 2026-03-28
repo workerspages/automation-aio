@@ -47,7 +47,7 @@ services:
       # === Cloudflare Tunnel 配置 ===
       # 必须提供 Token，否则脚本会报错并跳过启动  开启:true 关闭:false 
       - ENABLE_CLOUDFLARE_TUNNEL=false
-      - CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+      - CLOUDFLARE_TUNNEL_TOKEN=your-tunnel-token-here
       - APP_PUBLIC_DOMAIN=                                         # Cloudflare Tunnel后台配置的域名
     volumes:
       - ./Downloads:/home/headless/Downloads
