@@ -158,7 +158,7 @@ class ScriptFile(db.Model):
 
 class BrowserProfile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    profile_data = db.Column(db.LargeBinary)
+    profile_data = db.Column(db.LargeBinary(length=(2**32)-1))  # 强制生成 LONGBLOB，解决 64KB 限制
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
 
 @login_manager.user_loader
@@ -874,6 +874,13 @@ def initialize_system():
         
         try:
             db.session.execute(text("ALTER TABLE task ADD COLUMN timeout INTEGER DEFAULT 600"))
+            db.session.commit()
+        except:
+            db.session.rollback()
+            
+        try:
+            # [HOTFIX] 针对 MySQL/MariaDB，强制升级 profile_data 的容量为 LONGBLOB，解决 Data too long 报错
+            db.session.execute(text("ALTER TABLE browser_profile MODIFY COLUMN profile_data LONGBLOB"))
             db.session.commit()
         except:
             db.session.rollback()
