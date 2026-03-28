@@ -96,9 +96,34 @@ scheduler.add_job(
     replace_existing=True
 )
 
-scheduler.start()
+scheduler = BackgroundScheduler(timezone=SYSTEM_TZ, job_defaults=job_defaults)
 
-task_executor_pool = ThreadPoolExecutor(max_workers=5)
+task_executor_pool = ThreadPoolExecutor(max_workers=1)
+
+# === 全局进程管理器：实现抢占强杀机制 ===
+import threading
+import signal
+ACTIVE_PROCESSES = []
+active_process_lock = threading.Lock()
+
+def kill_active_processes():
+    logger.warning("☠️ Preemption triggered: Killing all active task processes...")
+    with active_process_lock:
+        for p in ACTIVE_PROCESSES:
+            try:
+                p.terminate()
+            except: pass
+            try:
+                p.kill()
+            except: pass
+        ACTIVE_PROCESSES.clear()
+        
+    try:
+        # Also clean up orphaned automation browsers and scripts
+        subprocess.run("pkill -9 -f 'chrome'", shell=True, capture_output=True)
+        subprocess.run("pkill -9 -f 'chromium'", shell=True, capture_output=True)
+        subprocess.run("pkill -9 -f 'autokey-run'", shell=True, capture_output=True)
+    except: pass
 
 logging.basicConfig(level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -500,8 +525,11 @@ def run_task_now(task_id):
     task = db.session.get(Task, task_id)
     if not task: return jsonify({'error': 'Task not found'}), 404
     
+    # 抢占机制：立刻清场排他
+    kill_active_processes()
+    
     task_executor_pool.submit(run_task_with_context, app, task_id)
-    return jsonify({'success': True, 'message': '任务已加入执行队列'})
+    return jsonify({'success': True, 'message': '任务执行已强行接管并在后台启动'})
 
 @app.route('/api/tasks/<int:task_id>/toggle', methods=['POST'])
 @login_required
@@ -539,6 +567,9 @@ def execute_script_core(task_id):
         return False
     
     print(f"🚀 Executing task: {task.name} ({task.script_path})")
+    
+    # 抢占机制：清场当前正在执行的后台一切任务 (尤其是针对定时任务触发进来的)
+    kill_active_processes()
     
     # 更新运行时间
     task.last_run = datetime.now(SYSTEM_TZ).replace(tzinfo=None)
@@ -664,13 +695,25 @@ def execute_python_script(task_name, script_path, timeout_sec=600):
     try:
         cmd = [sys.executable, script_path]
         print(f"Running command: {cmd}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec, env=env)
+        p = subprocess.Popen(cmd, capture_output=True, text=True, env=env)
         
-        success = result.returncode == 0
-        log_msg = (result.stdout + "\n" + result.stderr).strip() or "No output"
+        with active_process_lock:
+            ACTIVE_PROCESSES.append(p)
+            
+        try:
+            stdout, stderr = p.communicate(timeout=timeout_sec)
+            success = p.returncode == 0
+            log_msg = (stdout + "\n" + stderr).strip() or "No output"
+        except subprocess.TimeoutExpired:
+            p.kill()
+            success = False
+            log_msg = f"Timeout ({timeout_sec}s)"
+        finally:
+            with active_process_lock:
+                if p in ACTIVE_PROCESSES: ACTIVE_PROCESSES.remove(p)
         
         if success: logger.info(f"Python {task_name} Success: {log_msg[:100]}...")
-        else: logger.error(f"Python {task_name} Failed: {result.stderr}")
+        else: logger.error(f"Python {task_name} Failed")
         
         script_type = "(Py)"
         try:
@@ -721,38 +764,59 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
     print(f"Running AutoKey (Try 1): {cmd}")
     # 为保证稳定，我们对挂着的部分加上 timeout 处理
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec, env=env)
-    except subprocess.TimeoutExpired as e:
-        logger.error(f"AutoKey Timeout Try 1: {e}")
-        from scripts.task_executor import send_telegram_notification
-        import traceback
-        if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务超时 ({timeout_sec}s)", bot_token, chat_id)
-        return False
+        p1 = subprocess.Popen(cmd, capture_output=True, text=True, env=env)
+        with active_process_lock: ACTIVE_PROCESSES.append(p1)
+        try:
+            stdout1, stderr1 = p1.communicate(timeout=timeout_sec)
+            result_code = p1.returncode
+        except subprocess.TimeoutExpired as e:
+            p1.kill()
+            logger.error(f"AutoKey Timeout Try 1: {e}")
+            from scripts.task_executor import send_telegram_notification
+            import traceback
+            if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务超时 ({timeout_sec}s)", bot_token, chat_id)
+            return False
+        finally:
+            with active_process_lock:
+                if p1 in ACTIVE_PROCESSES: ACTIVE_PROCESSES.remove(p1)
+                
     except Exception as e:
         logger.error(f"AutoKey Exception Try 1: {e}")
         return False
     
     # 策略 2: 如果失败，尝试去掉后缀 (例如 test_browser)
-    if result.returncode != 0 and script_name.endswith('.py'):
+    if result_code != 0 and script_name.endswith('.py'):
         stem = Path(script_name).stem
         cmd_retry = ['autokey-run', '-s', stem]
         print(f"Running AutoKey (Try 2): {cmd_retry}")
         try:
-            result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=timeout_sec, env=env)
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"AutoKey Timeout Try 2: {e}")
-            from scripts.task_executor import send_telegram_notification
-            if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务重试超时 ({timeout_sec}s)", bot_token, chat_id)
-            return False
+            p2 = subprocess.Popen(cmd_retry, capture_output=True, text=True, env=env)
+            with active_process_lock: ACTIVE_PROCESSES.append(p2)
+            try:
+                stdout2, stderr2 = p2.communicate(timeout=timeout_sec)
+                result_code2 = p2.returncode
+                stdout_final, stderr_final = stdout2, stderr2
+            except subprocess.TimeoutExpired as e:
+                p2.kill()
+                logger.error(f"AutoKey Timeout Try 2: {e}")
+                from scripts.task_executor import send_telegram_notification
+                if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务重试超时 ({timeout_sec}s)", bot_token, chat_id)
+                return False
+            finally:
+                with active_process_lock:
+                    if p2 in ACTIVE_PROCESSES: ACTIVE_PROCESSES.remove(p2)
         except Exception as e:
             logger.error(f"AutoKey Exception Try 2: {e}")
             return False
+    else:
+        stdout_final, stderr_final = stdout1, stderr1
+        result_code2 = result_code
 
-    success = result.returncode == 0
+    success = result_code2 == 0
     
     # === 构建日志通知 ===
     # 1. 控制台输出 (Stdout/Stderr)
-    console_out = (result.stdout + "\n" + result.stderr).strip()
+    console_out = (stdout_final + "\n" + stderr_final).strip()
     if console_out:
         log_msg += f"--- Console Output ---\n{console_out}\n\n"
 
