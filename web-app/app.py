@@ -147,6 +147,12 @@ def kill_active_processes():
         subprocess.run("pkill -9 -f 'chromium'", shell=True, capture_output=True)
         subprocess.run("pkill -9 -f 'autokey-run'", shell=True, capture_output=True)
         subprocess.run("pkill -9 -f 'autokey-gtk'", shell=True, capture_output=True)
+        
+        # [HOTFIX] 清除 Chrome 异常崩溃导致启动弹出“恢复页面”的干扰气泡 (防止遮挡自动化坐标)
+        for pre_path in ['/home/headless/.config/google-chrome/Default/Preferences', '/home/headless/.config/chromium/Default/Preferences']:
+            subprocess.run(f"sed -i 's/\"exited_cleanly\":false/\"exited_cleanly\":true/g' {pre_path} 2>/dev/null", shell=True)
+            subprocess.run(f"sed -i 's/\"exit_type\":\"Crashed\"/\"exit_type\":\"Normal\"/g' {pre_path} 2>/dev/null", shell=True)
+            subprocess.run(f"sed -i 's/\"exit_type\":\"SessionEnded\"/\"exit_type\":\"Normal\"/g' {pre_path} 2>/dev/null", shell=True)
     except: pass
 
 logging.basicConfig(level=logging.INFO, 
