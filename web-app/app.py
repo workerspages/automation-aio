@@ -894,6 +894,11 @@ def initialize_system():
                 file_path = target_dir / record.filename
                 # 写入文件代码
                 file_path.write_text(record.content, encoding='utf-8')
+                # 修复权限: 防止 root (entrypoint) 写入导致 headless 无法覆盖
+                try:
+                    import shutil
+                    shutil.chown(file_path, user="headless", group="headless")
+                except: pass
                 
                 # 如果是 autokey 脚本，还需要恢复 .json 定义文件才能被系统识别
                 if record.folder == 'autokey' and record.filename.endswith('.py'):
@@ -912,6 +917,9 @@ def initialize_system():
                             "hotkey": {"hotKey": None, "modifiers": []}
                         }
                         json_path.write_text(json.dumps(script_config, indent=4), encoding='utf-8')
+                        try:
+                            shutil.chown(json_path, user="headless", group="headless")
+                        except: pass
             if script_files:
                 logger.info(f"✅ Synced {len(script_files)} script files from database to local filesystem.")
         except Exception as e:
