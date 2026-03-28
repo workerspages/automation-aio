@@ -146,6 +146,7 @@ def kill_active_processes():
         subprocess.run("pkill -9 -f 'chrome'", shell=True, capture_output=True)
         subprocess.run("pkill -9 -f 'chromium'", shell=True, capture_output=True)
         subprocess.run("pkill -9 -f 'autokey-run'", shell=True, capture_output=True)
+        subprocess.run("pkill -9 -f 'autokey-gtk'", shell=True, capture_output=True)
     except: pass
 
 logging.basicConfig(level=logging.INFO, 
@@ -821,6 +822,7 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
         except subprocess.TimeoutExpired as e:
             p1.kill()
             logger.error(f"AutoKey Timeout Try 1: {e}")
+            reload_autokey() # Force restart AutoKey engine to abort the runaway script
             from scripts.task_executor import send_telegram_notification
             import traceback
             if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务超时 ({timeout_sec}s)", bot_token, chat_id)
@@ -849,6 +851,7 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
             except subprocess.TimeoutExpired as e:
                 p2.kill()
                 logger.error(f"AutoKey Timeout Try 2: {e}")
+                reload_autokey() # Force restart AutoKey engine to abort the runaway script
                 from scripts.task_executor import send_telegram_notification
                 if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务重试超时 ({timeout_sec}s)", bot_token, chat_id)
                 return False
