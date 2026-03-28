@@ -102,7 +102,9 @@
                 <label>Cron 表达式</label>
                 <div class="cron-presets">
                     <button type="button" class="preset-btn" onclick="setCron('0 9 * * *')">每天9点</button>
-                    <button type="button" class="preset-btn" onclick="setCron('*/10 * * * *')">每10分</button>
+                    <button type="button" class="preset-btn" onclick="setCron('*/5 * * * *')">每5分钟</button>
+                    <button type="button" class="preset-btn" onclick="setCron('0,30 * * * *')">每30分钟</button>
+                    <button type="button" class="preset-btn" onclick="setCron('0 */2 * * *')">每2小时</button>
                 </div>
                 <input type="text" id="cronExpression" placeholder="例如: 0 9 * * *" />
                 <small id="cronHelp" class="help-text">预览: 请输入</small>
