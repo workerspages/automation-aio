@@ -578,7 +578,8 @@ def execute_python_script(task_name, script_path):
     try:
         cmd = [sys.executable, script_path]
         print(f"Running command: {cmd}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+        timeout_sec = int(os.environ.get('MAX_SCRIPT_TIMEOUT', 600))
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec, env=env)
         
         success = result.returncode == 0
         log_msg = (result.stdout + "\n" + result.stderr).strip() or "No output"
@@ -633,14 +634,35 @@ def execute_autokey_script(script_name, task_name):
     # 策略 1: 尝试完整文件名 (例如 test_browser.py)
     cmd = ['autokey-run', '-s', script_name]
     print(f"Running AutoKey (Try 1): {cmd}")
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, env=env)
+    timeout_sec = int(os.environ.get('MAX_SCRIPT_TIMEOUT', 600))
+    # 为保证稳定，我们对挂着的部分加上 timeout 处理
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_sec, env=env)
+    except subprocess.TimeoutExpired as e:
+        logger.error(f"AutoKey Timeout Try 1: {e}")
+        from scripts.task_executor import send_telegram_notification
+        import traceback
+        if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务超时 ({timeout_sec}s)", bot_token, chat_id)
+        return False
+    except Exception as e:
+        logger.error(f"AutoKey Exception Try 1: {e}")
+        return False
     
     # 策略 2: 如果失败，尝试去掉后缀 (例如 test_browser)
     if result.returncode != 0 and script_name.endswith('.py'):
         stem = Path(script_name).stem
         cmd_retry = ['autokey-run', '-s', stem]
         print(f"Running AutoKey (Try 2): {cmd_retry}")
-        result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=300, env=env)
+        try:
+            result = subprocess.run(cmd_retry, capture_output=True, text=True, timeout=timeout_sec, env=env)
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"AutoKey Timeout Try 2: {e}")
+            from scripts.task_executor import send_telegram_notification
+            if bot_token and chat_id: send_telegram_notification(f"{task_name} (AutoKey)", False, f"任务重试超时 ({timeout_sec}s)", bot_token, chat_id)
+            return False
+        except Exception as e:
+            logger.error(f"AutoKey Exception Try 2: {e}")
+            return False
 
     success = result.returncode == 0
     
@@ -699,10 +721,13 @@ def reload_autokey():
             time.sleep(0.5)
             # 尝试列出脚本，如果成功则说明 DBus 服务已就绪
             check_cmd = ['autokey-run', '-l']
-            res = subprocess.run(check_cmd, env=env, capture_output=True)
-            if res.returncode == 0:
-                logger.info(f"✅ AutoKey restarted and ready (waited {i*0.5}s)")
-                return
+            try:
+                res = subprocess.run(check_cmd, env=env, capture_output=True, timeout=3)
+                if res.returncode == 0:
+                    logger.info(f"✅ AutoKey restarted and ready (waited {i*0.5}s)")
+                    return
+            except subprocess.TimeoutExpired:
+                logger.warning("AutoKey DBus check timed out.")
             
             # 检查进程是否意外退出
             if pro.poll() is not None:
