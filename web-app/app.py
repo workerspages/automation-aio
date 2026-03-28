@@ -97,6 +97,7 @@ scheduler.add_job(
 )
 
 scheduler = BackgroundScheduler(timezone=SYSTEM_TZ, job_defaults=job_defaults)
+scheduler.start()
 
 task_executor_pool = ThreadPoolExecutor(max_workers=1)
 
