@@ -600,7 +600,7 @@ def run_task_now(task_id):
     # 抢占机制：立刻清场排他
     kill_active_processes()
     
-    task_executor_pool.submit(run_task_with_context, app, task_id)
+    safe_submit(task_executor_pool, run_task_with_context, app, task_id)
     return jsonify({'success': True, 'message': '任务执行已强行接管并在后台启动'})
 
 @app.route('/api/tasks/<int:task_id>/toggle', methods=['POST'])
@@ -618,16 +618,29 @@ def toggle_task(task_id):
 
 # --- 执行逻辑 ---
 
+def _future_done_callback(future):
+    """Future 完成回调：捕获被 ThreadPoolExecutor 静默吞掉的异常"""
+    try:
+        exc = future.exception(timeout=0)
+        if exc:
+            logger.error(f"❌ ThreadPool task raised unhandled exception: {exc}", exc_info=exc)
+    except Exception:
+        pass
+
+def safe_submit(pool, fn, *args, **kwargs):
+    """提交任务到线程池，自动附加异常监控回调"""
+    future = pool.submit(fn, *args, **kwargs)
+    future.add_done_callback(_future_done_callback)
+    return future
+
 def run_task_with_context(app_instance, task_id):
-    print(f"🧵 Thread started for task {task_id}")
+    logger.info(f"🧵 Thread started for task {task_id}")
     try:
         with app_instance.app_context():
             success = execute_script_core(task_id)
-            print(f"🧵 Thread finished for task {task_id}, Success: {success}")
+            logger.info(f"🧵 Thread finished for task {task_id}, Success: {success}")
     except Exception as e:
-        print(f"❌ Thread error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"❌ Thread error for task {task_id}: {e}", exc_info=True)
 
 def execute_script_core(task_id):
     """
@@ -635,10 +648,10 @@ def execute_script_core(task_id):
     """
     task = db.session.get(Task, task_id)
     if not task:
-        print(f"❌ execute_script_core: Task {task_id} not found in DB")
+        logger.error(f"❌ execute_script_core: Task {task_id} not found in DB")
         return False
     
-    print(f"🚀 Executing task: {task.name} ({task.script_path})")
+    logger.info(f"🚀 Executing task: {task.name} ({task.script_path})")
     
     # 抢占机制：清场当前正在执行的后台一切任务 (尤其是针对定时任务触发进来的)
     kill_active_processes()
@@ -682,11 +695,11 @@ def execute_script_core(task_id):
         if 'autokey/data' in script_path or 'MyScripts' in script_path:
              # === 关键修复：传递完整文件名 (含后缀) ===
              script_name = Path(script_path).name
-             print(f"🔄 Detected AutoKey script by path: {script_name}")
+             logger.info(f"🔄 Detected AutoKey script by path: {script_name}")
              success = execute_autokey_script(script_name, task.name, timeout_sec=task_timeout)
              
         elif script_path.lower().endswith('.py'):
-            print(f"🐍 Running as standard Python script: {script_path}")
+            logger.info(f"🐍 Running as standard Python script: {script_path}")
             success = execute_python_script(task.name, script_path, timeout_sec=task_timeout)
             
         elif script_path.lower().endswith('.side'):
@@ -713,11 +726,11 @@ def execute_scheduled_task(task_id):
     2. 将真正繁重的自动化工作打包 submit 到后台单线程池
     3. 向 APScheduler 交还名额，调度器上绝不留下阻塞脚印
     """
-    logger.info(f"Scheduler alarm fired for task {task_id}, dispatching...")
+    logger.info(f"⏰ Scheduler alarm fired for task {task_id}, dispatching...")
     # 第一步: 闹钟响起的瞬间，立刻给线程池里卡住的任务断氧
     kill_active_processes()
-    # 第二步: 将苦力工作无缝推入后台线程池
-    task_executor_pool.submit(run_task_with_context, app, task_id)
+    # 第二步: 将苦力工作无缝推入后台线程池 (safe_submit 自动附加异常监控)
+    safe_submit(task_executor_pool, run_task_with_context, app, task_id)
     # 第三步: 本函数生命终结，APScheduler 线程瞬间自由
     logger.info(f"Task {task_id} dispatched to executor pool, scheduler thread released.")
 
@@ -808,7 +821,7 @@ def execute_python_script(task_name, script_path, timeout_sec=600):
     
     try:
         cmd = [sys.executable, script_path]
-        print(f"Running command: {cmd}")
+        logger.info(f"Running command: {cmd}")
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
         
         with active_process_lock:
@@ -875,7 +888,7 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
 
     # 策略 1: 尝试完整文件名 (例如 test_browser.py)
     cmd = ['autokey-run', '-s', script_name]
-    print(f"Running AutoKey (Try 1): {cmd}")
+    logger.info(f"Running AutoKey (Try 1): {cmd}")
     # 为保证稳定，我们对挂着的部分加上 timeout 处理
     try:
         p1 = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
@@ -904,7 +917,7 @@ def execute_autokey_script(script_name, task_name, timeout_sec=600):
     if result_code != 0 and result_code >= 0 and script_name.endswith('.py'):
         stem = Path(script_name).stem
         cmd_retry = ['autokey-run', '-s', stem]
-        print(f"Running AutoKey (Try 2): {cmd_retry}")
+        logger.info(f"Running AutoKey (Try 2): {cmd_retry}")
         try:
             p2 = subprocess.Popen(cmd_retry, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
             with active_process_lock: ACTIVE_PROCESSES.append(p2)
