@@ -87,7 +87,7 @@ SYSTEM_TZ_STR = os.environ.get('TZ', 'Asia/Shanghai')
 SYSTEM_TZ = pytz.timezone(SYSTEM_TZ_STR)
 
 job_defaults = {
-    'misfire_grace_time': 120,  # 错过触发后 2 分钟内补执行，超过则放弃
+    'misfire_grace_time': 300,  # [FIX] 120→300: 错过触发后 5 分钟内补执行，给看门狗恢复留时间
     'coalesce': True,
     'max_instances': 1  # 闹钟钩子仅需毫秒即返回，永远不会实例堆叠，1 为最纯净设计
 }
@@ -102,7 +102,9 @@ scheduler.add_job(
 )
 
 # [FIX] 调度器事件监听，用于调试任务触发问题
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR, EVENT_JOB_MISSED
+from apscheduler.events import (EVENT_JOB_EXECUTED, EVENT_JOB_ERROR, EVENT_JOB_MISSED,
+                                 EVENT_JOB_ADDED, EVENT_JOB_REMOVED,
+                                 EVENT_SCHEDULER_SHUTDOWN, EVENT_SCHEDULER_STARTED)
 
 def _on_job_executed(event):
     import logging as _log
@@ -117,11 +119,98 @@ def _on_job_missed(event):
     _logger = _log.getLogger('scheduler')
     _logger.warning(f"⚠️ Job {event.job_id} was MISSED at {event.scheduled_run_time}")
 
+def _on_job_lifecycle(event):
+    """追踪 Job 增删生命周期"""
+    import logging as _log
+    _logger = _log.getLogger('scheduler')
+    event_name = event.__class__.__name__
+    job_id = getattr(event, 'job_id', 'unknown')
+    _logger.info(f"📋 Job lifecycle: {event_name} for {job_id}")
+
+def _on_scheduler_state(event):
+    """调度器自身状态变化告警"""
+    import logging as _log
+    _logger = _log.getLogger('scheduler')
+    event_name = event.__class__.__name__
+    _logger.critical(f"🚨 Scheduler state change: {event_name}")
+
 scheduler.add_listener(_on_job_executed, EVENT_JOB_EXECUTED | EVENT_JOB_ERROR)
 scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
+scheduler.add_listener(_on_job_lifecycle, EVENT_JOB_ADDED | EVENT_JOB_REMOVED)
+scheduler.add_listener(_on_scheduler_state, EVENT_SCHEDULER_SHUTDOWN | EVENT_SCHEDULER_STARTED)
 scheduler.start()
 
-task_executor_pool = ThreadPoolExecutor(max_workers=1)
+# [FIX] 线程池扩容 1→2: 防止单线程卡死导致新任务无法提交
+task_executor_pool = ThreadPoolExecutor(max_workers=2)
+
+def _get_healthy_pool():
+    """获取一个健康的线程池，如果当前池已关闭则重建"""
+    global task_executor_pool
+    try:
+        if task_executor_pool._shutdown:
+            logger.warning("🔄 ThreadPool was shut down, recreating...")
+            task_executor_pool = ThreadPoolExecutor(max_workers=2)
+    except Exception:
+        task_executor_pool = ThreadPoolExecutor(max_workers=2)
+    return task_executor_pool
+
+# [FIX] 调度器看门狗线程：每 90 秒自检调度器存活状态与 Job 注册完整性
+def _scheduler_watchdog():
+    """调度器看门狗 (心脏监护仪)
+    
+    独立守夜线程，每 90 秒执行一次全面健康检查:
+    1. APScheduler 是否仍在运行
+    2. 所有 enabled Task 是否都有对应的 APScheduler Job
+    3. 线程池是否处于可用状态
+    如果检测到异常，自动修复。
+    """
+    _wlog = logging.getLogger('watchdog')
+    # 启动后先等待系统初始化完成
+    time.sleep(30)
+    _wlog.info("🐕 Scheduler watchdog started.")
+    while True:
+        try:
+            time.sleep(90)
+            with app.app_context():
+                # --- 检查 1: 调度器是否存活 ---
+                if not scheduler.running:
+                    _wlog.critical("🚨 WATCHDOG: Scheduler is DEAD! Restarting...")
+                    try:
+                        scheduler.start()
+                        _wlog.info("✅ WATCHDOG: Scheduler restarted successfully.")
+                    except Exception as e:
+                        _wlog.error(f"Failed to restart scheduler: {e}")
+                        continue
+                
+                # --- 检查 2: 所有 enabled 任务是否都有注册的 Job ---
+                enabled_tasks = Task.query.filter_by(enabled=True).all()
+                registered_job_ids = {job.id for job in scheduler.get_jobs()}
+                
+                missing_count = 0
+                for task in enabled_tasks:
+                    job_id = f'task_{task.id}'
+                    if job_id not in registered_job_ids:
+                        _wlog.warning(f"🚨 WATCHDOG: Job {job_id} ({task.name}) MISSING from scheduler! Re-registering...")
+                        schedule_task(task)
+                        missing_count += 1
+                
+                if missing_count > 0:
+                    _wlog.warning(f"🔧 WATCHDOG: Re-registered {missing_count} missing job(s).")
+                
+                # --- 检查 3: 线程池健康 ---
+                pool = _get_healthy_pool()
+                try:
+                    pending = pool._work_queue.qsize()
+                    if pending > 2:
+                        _wlog.warning(f"⚠️ WATCHDOG: ThreadPool has {pending} pending tasks (possible blockage)")
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            _wlog.error(f"WATCHDOG cycle error: {e}")
+
+_watchdog_thread = threading.Thread(target=_scheduler_watchdog, daemon=True, name='scheduler-watchdog')
+_watchdog_thread.start()
 
 # === 全局进程管理器：实现抢占强杀机制 ===
 import threading
@@ -600,7 +689,7 @@ def run_task_now(task_id):
     # 抢占机制：立刻清场排他
     kill_active_processes()
     
-    safe_submit(task_executor_pool, run_task_with_context, app, task_id)
+    safe_submit(_get_healthy_pool(), run_task_with_context, app, task_id)
     return jsonify({'success': True, 'message': '任务执行已强行接管并在后台启动'})
 
 @app.route('/api/tasks/<int:task_id>/toggle', methods=['POST'])
@@ -729,10 +818,11 @@ def execute_scheduled_task(task_id):
     logger.info(f"⏰ Scheduler alarm fired for task {task_id}, dispatching...")
     # 第一步: 闹钟响起的瞬间，立刻给线程池里卡住的任务断氧
     kill_active_processes()
-    # 第二步: 将苦力工作无缝推入后台线程池 (safe_submit 自动附加异常监控)
-    safe_submit(task_executor_pool, run_task_with_context, app, task_id)
+    # 第二步: 获取健康线程池，将苦力工作无缝推入后台 (safe_submit 自动附加异常监控)
+    pool = _get_healthy_pool()
+    safe_submit(pool, run_task_with_context, app, task_id)
     # 第三步: 本函数生命终结，APScheduler 线程瞬间自由
-    logger.info(f"Task {task_id} dispatched to executor pool, scheduler thread released.")
+    logger.info(f"Task {task_id} dispatched to executor pool (pool_shutdown={pool._shutdown}), scheduler thread released.")
 
 # --- 具体执行器 ---
 
@@ -1019,6 +1109,42 @@ def reload_autokey():
 
     except Exception as e:
         logger.error(f"❌ Failed to reload AutoKey: {e}")
+
+# [FIX] 调度器诊断 API：实时查看调度器状态
+@app.route('/api/scheduler/status')
+@login_required
+def scheduler_status():
+    """返回调度器运行状态、注册 Job 列表和线程池健康信息"""
+    jobs = []
+    try:
+        for job in scheduler.get_jobs():
+            jobs.append({
+                'id': job.id,
+                'name': job.name,
+                'next_run': str(job.next_run_time) if job.next_run_time else None,
+                'trigger': str(job.trigger)
+            })
+    except Exception as e:
+        logger.error(f"Failed to list scheduler jobs: {e}")
+    
+    pool = _get_healthy_pool()
+    try:
+        pool_pending = pool._work_queue.qsize()
+        pool_shutdown = pool._shutdown
+    except Exception:
+        pool_pending = -1
+        pool_shutdown = None
+    
+    return jsonify({
+        'scheduler_running': scheduler.running,
+        'total_jobs': len(jobs),
+        'jobs': jobs,
+        'pool_workers': 2,
+        'pool_pending': pool_pending,
+        'pool_shutdown': pool_shutdown,
+        'watchdog_alive': _watchdog_thread.is_alive() if _watchdog_thread else False,
+        'server_time': datetime.now(SYSTEM_TZ).isoformat()
+    })
 
 def schedule_task(task):
     if task.enabled:
