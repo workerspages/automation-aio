@@ -35,10 +35,10 @@ app.config['SECRET_KEY'] = _secret_key
 def get_database_uri():
     db_host = os.environ.get('MARIADB_HOST')
     if db_host:
-        db_user = os.environ.get('MARIADB_USER', 'root')
-        db_pass = os.environ.get('MARIADB_PASSWORD', '')
-        db_port = os.environ.get('MARIADB_PORT', '3306')
-        db_name = os.environ.get('MARIADB_DB', 'automation')
+        db_user = os.environ.get('MARIADB_USER', 'root').strip('"\'')
+        db_pass = os.environ.get('MARIADB_PASSWORD', '').strip('"\'')
+        db_port = os.environ.get('MARIADB_PORT', '3306').strip('"\'')
+        db_name = os.environ.get('MARIADB_DB', 'automation').strip('"\'')
         
         uri = f"mysql+pymysql://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
         
