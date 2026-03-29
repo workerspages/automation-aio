@@ -268,6 +268,40 @@ def favicon():
 def health():
     return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()}), 200
 
+@app.route('/api/logs', methods=['GET'])
+@login_required
+def get_logs():
+    """读取任务执行日志，支持按任务名过滤"""
+    lines = int(request.args.get('lines', 200))
+    keyword = request.args.get('keyword', '').strip()
+    
+    log_files = [
+        '/app/logs/app.log',
+        '/app/data/executor.log',
+        '/app/logs/autokey.log'
+    ]
+    
+    all_lines = []
+    for log_path in log_files:
+        try:
+            if os.path.exists(log_path):
+                with open(log_path, 'r', encoding='utf-8', errors='replace') as f:
+                    file_lines = f.readlines()
+                    # 取最后 N 行
+                    tail = file_lines[-lines:] if len(file_lines) > lines else file_lines
+                    all_lines.extend(tail)
+        except Exception:
+            pass
+    
+    # 按关键词过滤
+    if keyword:
+        all_lines = [l for l in all_lines if keyword.lower() in l.lower()]
+    
+    # 只返回最后 lines 行
+    result = all_lines[-lines:]
+    
+    return jsonify({'logs': ''.join(result), 'total_lines': len(result)})
+
 # --- 文件管理 API ---
 def get_target_dir(folder_key):
     return BASE_DIRS.get(folder_key, BASE_DIRS['downloads'])

@@ -386,3 +386,98 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     toggleScheduleInputs();
 });
+
+// --- 日志查看器 ---
+let logAutoRefreshTimer = null;
+let logAutoRefreshEnabled = false;
+
+function openLogViewer(taskName) {
+    const keywordInput = document.getElementById('logKeyword');
+    if (taskName) {
+        keywordInput.value = taskName;
+        document.getElementById('logModalTitle').textContent = '📋 ' + taskName + ' 执行日志';
+    } else {
+        keywordInput.value = '';
+        document.getElementById('logModalTitle').textContent = '📋 全局执行日志';
+    }
+    document.getElementById('logModal').style.display = 'block';
+    fetchLogs();
+    // 自动开启刷新
+    if (!logAutoRefreshEnabled) {
+        toggleAutoRefresh();
+    }
+}
+
+function closeLogViewer() {
+    document.getElementById('logModal').style.display = 'none';
+    // 停止自动刷新
+    if (logAutoRefreshEnabled) {
+        toggleAutoRefresh();
+    }
+}
+
+function fetchLogs() {
+    const keyword = document.getElementById('logKeyword').value.trim();
+    const params = new URLSearchParams({ lines: 300 });
+    if (keyword) params.set('keyword', keyword);
+
+    fetch('/api/logs?' + params.toString())
+        .then(r => r.json())
+        .then(data => {
+            const logEl = document.getElementById('logContent');
+            if (data.logs && data.logs.trim()) {
+                logEl.innerHTML = colorizeLog(data.logs);
+            } else {
+                logEl.textContent = '暂无日志记录' + (keyword ? ' (过滤: ' + keyword + ')' : '');
+            }
+            // 自动滚动到底部
+            logEl.scrollTop = logEl.scrollHeight;
+            // 更新状态栏
+            document.getElementById('logLineCount').textContent = '显示 ' + data.total_lines + ' 行';
+            document.getElementById('logLastUpdate').textContent = '更新: ' + new Date().toLocaleTimeString();
+        })
+        .catch(e => {
+            document.getElementById('logContent').textContent = '加载失败: ' + e;
+        });
+}
+
+function colorizeLog(text) {
+    // 对日志文本进行语法高亮着色
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        // 错误/失败 - 红色
+        .replace(/(ERROR|CRITICAL|❌|Failed|Exception|Traceback|Error)/gi, '<span style="color:#f85149">$1</span>')
+        // 警告 - 橙色
+        .replace(/(WARNING|⚠️|WARN|Timeout)/gi, '<span style="color:#d29922">$1</span>')
+        // 成功 - 绿色
+        .replace(/(SUCCESS|✅|✓|Success|Finished|completed)/gi, '<span style="color:#3fb950">$1</span>')
+        // 信息标记 - 蓝色
+        .replace(/(INFO|🚀|⏰|☠️|🧵|♻️)/g, '<span style="color:#58a6ff">$1</span>')
+        // 时间戳 - 灰色
+        .replace(/(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/g, '<span style="color:#8b949e">$1</span>');
+}
+
+function toggleAutoRefresh() {
+    logAutoRefreshEnabled = !logAutoRefreshEnabled;
+    const btn = document.getElementById('autoRefreshBtn');
+    if (logAutoRefreshEnabled) {
+        btn.textContent = '⏸ 自动刷新';
+        btn.classList.add('active');
+        logAutoRefreshTimer = setInterval(fetchLogs, 3000);
+    } else {
+        btn.textContent = '▶ 自动刷新';
+        btn.classList.remove('active');
+        if (logAutoRefreshTimer) {
+            clearInterval(logAutoRefreshTimer);
+            logAutoRefreshTimer = null;
+        }
+    }
+}
+
+function clearLogFilter() {
+    document.getElementById('logKeyword').value = '';
+    document.getElementById('logModalTitle').textContent = '📋 全局执行日志';
+    fetchLogs();
+}

@@ -22,6 +22,17 @@
         .folder-tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; background: rgba(255,255,255,0.05); color: #94a1b2; }
         .folder-tab.active { background: var(--primary-color); color: white; }
         .CodeMirror { height: 60vh; border-radius: 8px; font-family: 'Fira Code', monospace; }
+        /* Log Viewer */
+        .log-viewer { background: #0d1117; border: 1px solid #30363d; border-radius: 10px; padding: 16px; max-height: 60vh; overflow-y: auto; font-family: 'Fira Code', 'Consolas', monospace; font-size: 0.82rem; line-height: 1.6; white-space: pre-wrap; word-break: break-all; color: #c9d1d9; }
+        .log-viewer::-webkit-scrollbar { width: 8px; }
+        .log-viewer::-webkit-scrollbar-track { background: #161b22; border-radius: 4px; }
+        .log-viewer::-webkit-scrollbar-thumb { background: #30363d; border-radius: 4px; }
+        .log-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+        .log-toolbar input { flex: 1; min-width: 120px; padding: 8px 14px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); border-radius: 8px; color: white; font-size: 0.9rem; }
+        .log-toolbar .log-btn { padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; font-weight: 500; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05); color: var(--text-muted); cursor: pointer; transition: all 0.2s; }
+        .log-toolbar .log-btn:hover { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .log-toolbar .log-btn.active { background: var(--primary-color); color: white; border-color: var(--primary-color); }
+        .log-status { font-size: 0.8rem; color: var(--text-muted); margin-top: 8px; display: flex; justify-content: space-between; }
     </style>
 </head>
 <body>
@@ -68,7 +79,8 @@
                 <button class="btn-success" onclick="runTaskNow({{ task.id }})">▶ 运行</button>
                 <button class="btn-secondary" onclick="toggleTask({{ task.id }})">{{ '暂停' if task.enabled else '启用' }}</button>
                 <button class="btn-secondary" onclick="editTask({{ task.id }})">✎ 编辑</button>
-                <button class="btn-danger" onclick="deleteTask({{ task.id }})">🗑 删除</button>
+                <button class="btn-secondary" onclick="openLogViewer('{{ task.name }}')">📋 日志</button>
+                <button class="btn-danger" onclick="deleteTask({{ task.id }})" style="grid-column: span 2;">🗑 删除</button>
             </div>
         </div>
         {% endfor %}
@@ -150,6 +162,27 @@
         <div class="form-actions" style="margin-top: 15px;">
             <button type="button" class="btn-secondary" onclick="closeModal('editorModal')">关闭</button>
             <button type="button" class="btn-primary" onclick="saveScriptContent()">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- Log Viewer Modal -->
+<div id="logModal" class="modal">
+    <div class="modal-content" style="max-width: 900px; width: 95vw;">
+        <div class="modal-header">
+            <h2 id="logModalTitle">📋 执行日志</h2>
+            <span class="close" onclick="closeLogViewer()">&times;</span>
+        </div>
+        <div class="log-toolbar">
+            <input type="text" id="logKeyword" placeholder="按任务名过滤..." oninput="fetchLogs()" />
+            <button class="log-btn" onclick="fetchLogs()">🔍 搜索</button>
+            <button class="log-btn" id="autoRefreshBtn" onclick="toggleAutoRefresh()">⏸ 自动刷新</button>
+            <button class="log-btn" onclick="clearLogFilter()">✕ 清除过滤</button>
+        </div>
+        <div class="log-viewer" id="logContent">正在加载日志...</div>
+        <div class="log-status">
+            <span id="logLineCount"></span>
+            <span id="logLastUpdate"></span>
         </div>
     </div>
 </div>
