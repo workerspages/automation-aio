@@ -33,7 +33,7 @@ app.config['SECRET_KEY'] = _secret_key
 
 # --- 数据库连接配置 ---
 def get_database_uri():
-    db_host = os.environ.get('MARIADB_HOST')
+    db_host = os.environ.get('MARIADB_HOST', '').strip('"\'')
     if db_host:
         db_user = os.environ.get('MARIADB_USER', 'root').strip('"\'')
         db_pass = os.environ.get('MARIADB_PASSWORD', '').strip('"\'')
