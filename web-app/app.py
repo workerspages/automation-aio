@@ -209,11 +209,11 @@ def _scheduler_watchdog():
         except Exception as e:
             _wlog.error(f"WATCHDOG cycle error: {e}")
 
+import threading
 _watchdog_thread = threading.Thread(target=_scheduler_watchdog, daemon=True, name='scheduler-watchdog')
 _watchdog_thread.start()
 
 # === 全局进程管理器：实现抢占强杀机制 ===
-import threading
 import signal
 ACTIVE_PROCESSES = []
 active_process_lock = threading.Lock()
