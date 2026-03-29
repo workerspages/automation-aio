@@ -89,7 +89,7 @@ SYSTEM_TZ = pytz.timezone(SYSTEM_TZ_STR)
 job_defaults = {
     'misfire_grace_time': 3600,
     'coalesce': True,
-    'max_instances': 1  # 与单线程抢占式执行设计保持一致
+    'max_instances': 5  # 增加 max_instances 避免前次任务卡死时 APScheduler 跳过触发，从而确保抢占机制得以启动
 }
 scheduler = BackgroundScheduler(timezone=SYSTEM_TZ, job_defaults=job_defaults)
 # 追加浏览器凭据每 2 小时自动云端快照
@@ -143,16 +143,16 @@ def kill_active_processes():
         
     try:
         # Also clean up orphaned automation browsers and scripts
-        subprocess.run("pkill -9 -f 'chrome'", shell=True, capture_output=True)
-        subprocess.run("pkill -9 -f 'chromium'", shell=True, capture_output=True)
-        subprocess.run("pkill -9 -f 'autokey-run'", shell=True, capture_output=True)
-        subprocess.run("pkill -9 -f 'autokey-gtk'", shell=True, capture_output=True)
+        subprocess.run("pkill -9 -f 'chrome'", shell=True, capture_output=True, timeout=5)
+        subprocess.run("pkill -9 -f 'chromium'", shell=True, capture_output=True, timeout=5)
+        subprocess.run("pkill -9 -f 'autokey-run'", shell=True, capture_output=True, timeout=5)
+        subprocess.run("pkill -9 -f 'autokey-gtk'", shell=True, capture_output=True, timeout=5)
         
         # [HOTFIX] 清除 Chrome 异常崩溃导致启动弹出“恢复页面”的干扰气泡 (防止遮挡自动化坐标)
         for pre_path in ['/home/headless/.config/google-chrome/Default/Preferences', '/home/headless/.config/chromium/Default/Preferences']:
-            subprocess.run(f"sed -i 's/\"exited_cleanly\":false/\"exited_cleanly\":true/g' {pre_path} 2>/dev/null", shell=True)
-            subprocess.run(f"sed -i 's/\"exit_type\":\"Crashed\"/\"exit_type\":\"Normal\"/g' {pre_path} 2>/dev/null", shell=True)
-            subprocess.run(f"sed -i 's/\"exit_type\":\"SessionEnded\"/\"exit_type\":\"Normal\"/g' {pre_path} 2>/dev/null", shell=True)
+            subprocess.run(f"sed -i 's/\"exited_cleanly\":false/\"exited_cleanly\":true/g' {pre_path} 2>/dev/null", shell=True, timeout=3)
+            subprocess.run(f"sed -i 's/\"exit_type\":\"Crashed\"/\"exit_type\":\"Normal\"/g' {pre_path} 2>/dev/null", shell=True, timeout=3)
+            subprocess.run(f"sed -i 's/\"exit_type\":\"SessionEnded\"/\"exit_type\":\"Normal\"/g' {pre_path} 2>/dev/null", shell=True, timeout=3)
     except: pass
 
 logging.basicConfig(level=logging.INFO, 
@@ -630,7 +630,11 @@ def execute_script_core(task_id):
     
     try:
         task_timeout = getattr(task, 'timeout', 600)
-        if not task_timeout: task_timeout = 600
+        try:
+            task_timeout = int(task_timeout)
+        except:
+            task_timeout = 600
+        if not task_timeout or task_timeout <= 0: task_timeout = 600
         
         # 优先识别 AutoKey (匹配 MyScripts 或 autokey/data)
         if 'autokey/data' in script_path or 'MyScripts' in script_path:

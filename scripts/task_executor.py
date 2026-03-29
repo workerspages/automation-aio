@@ -76,14 +76,14 @@ def send_email_notification(script_name, success, message):
     msg['To'] = config['to_addr']
     msg['Subject'] = Header(subject, 'utf-8')
     msg.attach(MIMEText(body, 'html', 'utf-8'))
-    
     try:
-        server = smtplib.SMTP_SSL(config['host'], config['port']) if config['port'] == 465 else smtplib.SMTP(config['host'], config['port'])
+        server = smtplib.SMTP_SSL(config['host'], config['port'], timeout=15) if config['port'] == 465 else smtplib.SMTP(config['host'], config['port'], timeout=15)
         if config['port'] != 465: server.starttls()
         server.login(config['user'], config['password'])
         server.sendmail(msg['From'], config['to_addr'], msg.as_string())
         server.quit()
-    except Exception as e: logger.error(f"Email fail: {e}")
+    except Exception as e:
+        logger.error(f"Email fail: {e}")
 
 def send_telegram_notification(script_name, success, message, bot_token, chat_id):
     if not bot_token or not chat_id: return
