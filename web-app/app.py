@@ -89,7 +89,7 @@ SYSTEM_TZ = pytz.timezone(SYSTEM_TZ_STR)
 job_defaults = {
     'misfire_grace_time': 3600,
     'coalesce': True,
-    'max_instances': 5  # 增加 max_instances 避免前次任务卡死时 APScheduler 跳过触发，从而确保抢占机制得以启动
+    'max_instances': 1  # 闹钟钩子仅需毫秒即返回，永远不会实例堆叠，1 为最纯净设计
 }
 scheduler = BackgroundScheduler(timezone=SYSTEM_TZ, job_defaults=job_defaults)
 # 追加浏览器凭据每 2 小时自动云端快照
@@ -663,9 +663,21 @@ def execute_script_core(task_id):
         db.session.commit()
         return False
 
-def execute_script(task_id):
-    with app.app_context():
-        execute_script_core(task_id)
+def execute_scheduled_task(task_id):
+    """调度专用毫秒级非阻塞钩子 (闹钟模式)
+
+    APScheduler 线程触发后，本函数在数毫秒内完成以下工作并立即返回:
+    1. 强杀当前线程池中卡住的任务进程 (抢占断氧)
+    2. 将真正繁重的自动化工作打包 submit 到后台单线程池
+    3. 向 APScheduler 交还名额，调度器上绝不留下阻塞脚印
+    """
+    logger.info(f"Scheduler alarm fired for task {task_id}, dispatching...")
+    # 第一步: 闹钟响起的瞬间，立刻给线程池里卡住的任务断氧
+    kill_active_processes()
+    # 第二步: 将苦力工作无缝推入后台线程池
+    task_executor_pool.submit(run_task_with_context, app, task_id)
+    # 第三步: 本函数生命终结，APScheduler 线程瞬间自由
+    logger.info(f"Task {task_id} dispatched to executor pool, scheduler thread released.")
 
 # --- 具体执行器 ---
 
@@ -987,7 +999,7 @@ def schedule_task(task):
             
             if trigger:
                 job = scheduler.add_job(
-                    func=execute_script,
+                    func=execute_scheduled_task,
                     trigger=trigger,
                     id=f'task_{task.id}',
                     args=[task.id],
