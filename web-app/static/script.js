@@ -226,10 +226,10 @@ function switchFolder(folder) {
     document.querySelectorAll('.folder-tab').forEach(el => el.classList.remove('active'));
     document.getElementById(`tab-${folder}`).classList.add('active');
 
-    const pathHint = folder === 'autokey'
-        ? '调用浏览器: subprocess.Popen(["google-chrome", "--start-maximized", "--no-sandbox"])'
-        : `Selenium 调用 AutoKey 一样的浏览器: options.add_argument('--user-data-dir=/home/headless/.config/google-chrome')`;
-    document.getElementById('current-path-hint').textContent = pathHint;
+const pathHint = folder === 'autokey'
+        ? '调用浏览器: <br>subprocess.Popen(["google-chrome", "--start-maximized", "--no-sandbox"])'
+        : `Selenium 调用 AutoKey 一样的浏览器: <br>options.add_argument('--user-data-dir=/home/headless/.config/google-chrome')`;
+    document.getElementById('current-path-hint').innerHTML = pathHint;
 
     loadFiles(folder);
 }
