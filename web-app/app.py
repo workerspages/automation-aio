@@ -87,7 +87,7 @@ SYSTEM_TZ_STR = os.environ.get('TZ', 'Asia/Shanghai')
 SYSTEM_TZ = pytz.timezone(SYSTEM_TZ_STR)
 
 job_defaults = {
-    'misfire_grace_time': 3600,
+    'misfire_grace_time': 300,  # 错过触发后 5 分钟内补执行，超过则放弃
     'coalesce': True,
     'max_instances': 1  # 闹钟钩子仅需毫秒即返回，永远不会实例堆叠，1 为最纯净设计
 }
