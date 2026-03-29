@@ -227,7 +227,7 @@ function switchFolder(folder) {
     document.getElementById(`tab-${folder}`).classList.add('active');
 
 const pathHint = folder === 'autokey'
-        ? '调用浏览器: <br>subprocess.Popen(["google-chrome", "--start-maximized", "--no-sandbox"])'
+        ? '调用浏览器: <br>subprocess.Popen(["google-chrome", "--start-maximized", "--no-sandbox"])  <br>坐标测试工具：<br>watch -n 0.1 xdotool getmouselocation'
         : `调用 AutoKey 一样的浏览器（容易出错）: <br>options.add_argument('--user-data-dir=/home/headless/.config/google-chrome') <br>调用独立浏览器: <br>options.add_argument(f'--user-data-dir={user_data_dir}')`;
     document.getElementById('current-path-hint').innerHTML = pathHint;
 
