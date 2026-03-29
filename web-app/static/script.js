@@ -227,8 +227,8 @@ function switchFolder(folder) {
     document.getElementById(`tab-${folder}`).classList.add('active');
 
     const pathHint = folder === 'autokey'
-        ? 'AutoKey 脚本 调用浏览器器：subprocess.Popen(["google-chrome", "--start-maximized", "--no-sandbox"])'
-        : 'Selenium/Python 脚本 让 Selenium 调用 AutoKey 一样的浏览器器：options.add_argument('--user-data-dir=/home/headless/.config/google-chrome')';
+        ? 'AutoKey 脚本 调用浏览器: subprocess.Popen(["google-chrome", "--start-maximized", "--no-sandbox"])'
+        : `Selenium/Python 脚本 让 Selenium 调用 AutoKey 一样的浏览器: options.add_argument('--user-data-dir=/home/headless/.config/google-chrome')`;
     document.getElementById('current-path-hint').textContent = pathHint;
 
     loadFiles(folder);
