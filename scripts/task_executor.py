@@ -113,6 +113,8 @@ class SeleniumIDEExecutor:
             options.add_argument('--start-maximized')
             options.add_argument('--disable-gpu')
             options.add_argument('--disable-infobars')
+            # 共享桌面 Chrome 的 Profile 目录，复用 Cookie/LocalStorage/登录态
+            options.add_argument('--user-data-dir=/home/headless/.config/google-chrome')
             options.add_argument('--disable-blink-features=AutomationControlled')
             options.add_experimental_option('excludeSwitches', ['enable-automation'])
             options.add_experimental_option('useAutomationExtension', False)
