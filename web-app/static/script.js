@@ -2,6 +2,22 @@ let currentTaskId = null;
 let currentFolder = 'downloads'; // 'downloads' or 'autokey'
 let editorInstance = null; // CodeMirror instance
 
+// ─── 统一 fetch 封装，自动处理 401 跳转 ───────────────────────────────────────
+async function apiFetch(url, options = {}) {
+    try {
+        const res = await fetch(url, options);
+        if (res.status === 401) {
+            window.location.href = '/login';
+            return null;
+        }
+        return res;
+    } catch (e) {
+        console.error('apiFetch error:', e);
+        throw e;
+    }
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 // 切换调度模式输入的显示/隐藏
 function toggleScheduleInputs() {
     const cronGroup = document.getElementById('cronInputGroup');
@@ -48,9 +64,10 @@ function openAddModal() {
 }
 
 function updateScriptOptions(selectedValue = null) {
-    return fetch('/api/scripts')
-        .then(r => r.json())
+    return apiFetch('/api/scripts')
+        .then(r => { if (!r) return null; return r.json(); })
         .then(scripts => {
+            if (!scripts) return;
             const select = document.getElementById('scriptPath');
             select.innerHTML = '<option value="">-- 选择脚本 --</option>';
             scripts.forEach(script => {
@@ -70,9 +87,10 @@ function editTask(taskId) {
     currentTaskId = taskId;
     document.getElementById('modalTitle').textContent = '编辑任务';
 
-    fetch(`/api/tasks/${taskId}`)
-        .then(response => response.json())
+    apiFetch(`/api/tasks/${taskId}`)
+        .then(r => { if (!r) return null; return r.json(); })
         .then(task => {
+            if (!task) return;
             document.getElementById('taskId').value = task.id;
             document.getElementById('taskName').value = task.name;
 
@@ -130,13 +148,14 @@ function saveTask(event) {
     const url = taskId ? `/api/tasks/${taskId}` : '/api/tasks';
     const method = taskId ? 'PUT' : 'POST';
 
-    fetch(url, {
+    apiFetch(url, {
         method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
     })
-        .then(response => response.json())
+        .then(r => { if (!r) return null; return r.json(); })
         .then(result => {
+            if (!result) return;
             if (result.success) {
                 closeModal('taskModal');
                 location.reload();
@@ -150,9 +169,10 @@ function saveTask(event) {
 // --- 任务操作 ---
 function runTaskNow(taskId) {
     if (!confirm('确定立即执行此任务吗？')) return;
-    fetch(`/api/tasks/${taskId}/run`, { method: 'POST' })
-        .then(r => r.json())
+    apiFetch(`/api/tasks/${taskId}/run`, { method: 'POST' })
+        .then(r => { if (!r) return null; return r.json(); })
         .then(res => {
+            if (!res) return;
             if (res.success) alert('任务已加入队列');
             else alert('执行失败: ' + res.error);
         });
@@ -160,18 +180,20 @@ function runTaskNow(taskId) {
 
 function deleteTask(taskId) {
     if (!confirm('确定删除此任务吗？')) return;
-    fetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
-        .then(r => r.json())
+    apiFetch(`/api/tasks/${taskId}`, { method: 'DELETE' })
+        .then(r => { if (!r) return null; return r.json(); })
         .then(res => {
+            if (!res) return;
             if (res.success) location.reload();
             else alert('删除失败: ' + res.error);
         });
 }
 
 function toggleTask(taskId) {
-    fetch(`/api/tasks/${taskId}/toggle`, { method: 'POST' })
-        .then(r => r.json())
+    apiFetch(`/api/tasks/${taskId}/toggle`, { method: 'POST' })
+        .then(r => { if (!r) return null; return r.json(); })
         .then(res => {
+            if (!res) return;
             if (res.success) location.reload();
             else alert('操作失败: ' + res.error);
         });
@@ -206,9 +228,10 @@ function updateCronHelp(expression) {
 function backupBrowserState() {
     if (!confirm('您确定要将当前 Chrome 浏览器的 Cookie 和本地缓存状态备份到数据库云端吗？\r\n（建议在通过远程桌面成功登录目标网站后执行此操作）')) return;
     
-    fetch('/api/browser/backup', { method: 'POST' })
-        .then(r => r.json())
+    apiFetch('/api/browser/backup', { method: 'POST' })
+        .then(r => { if (!r) return null; return r.json(); })
         .then(res => {
+            if (!res) return;
             if (res.success) alert(res.message);
             else alert('备份失败: ' + res.error);
         })
@@ -238,9 +261,10 @@ function loadFiles(folder) {
     const container = document.getElementById('fileListContainer');
     container.innerHTML = '<div style="padding:20px;text-align:center;">加载中...</div>';
 
-    fetch(`/api/files?folder=${folder}`)
-        .then(r => r.json())
+    apiFetch(`/api/files?folder=${folder}`)
+        .then(r => { if (!r) return null; return r.json(); })
         .then(data => {
+            if (!data) return;
             if (!data.files || data.files.length === 0) {
                 container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;">暂无文件</div>';
                 return;
@@ -274,9 +298,10 @@ function createNewScript() {
 function deleteScript(filename, folder) {
     if (!confirm(`确定要删除 ${filename} 吗？`)) return;
 
-    fetch(`/api/files?folder=${folder}&filename=${encodeURIComponent(filename)}`, { method: 'DELETE' })
-        .then(r => r.json())
+    apiFetch(`/api/files?folder=${folder}&filename=${encodeURIComponent(filename)}`, { method: 'DELETE' })
+        .then(r => { if (!r) return null; return r.json(); })
         .then(res => {
+            if (!res) return;
             if (res.success) loadFiles(folder);
             else alert('删除失败: ' + res.error);
         });
@@ -308,9 +333,10 @@ function openEditor(filename, folder) {
     setTimeout(() => {
         initCodeMirror();
         if (filename) {
-            fetch(`/api/files/content?folder=${folder}&filename=${encodeURIComponent(filename)}`)
-                .then(r => r.json())
+            apiFetch(`/api/files/content?folder=${folder}&filename=${encodeURIComponent(filename)}`)
+                .then(r => { if (!r) return null; return r.json(); })
                 .then(res => {
+                    if (!res) return;
                     if (res.content !== undefined) {
                         editorInstance.setValue(res.content);
                     } else {
@@ -342,7 +368,7 @@ function saveScriptContent() {
         filename += '.py';
     }
 
-    fetch('/api/files', {
+    apiFetch('/api/files', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -351,8 +377,9 @@ function saveScriptContent() {
             content: content
         })
     })
-        .then(r => r.json())
+        .then(r => { if (!r) return null; return r.json(); })
         .then(res => {
+            if (!res) return;
             if (res.success) {
                 alert('保存成功!');
                 closeModal('editorModal');
@@ -421,9 +448,10 @@ function fetchLogs() {
     const params = new URLSearchParams({ lines: 300 });
     if (keyword) params.set('keyword', keyword);
 
-    fetch('/api/logs?' + params.toString())
-        .then(r => r.json())
+    apiFetch('/api/logs?' + params.toString())
+        .then(r => { if (!r) return null; return r.json(); })
         .then(data => {
+            if (!data) return;
             const logEl = document.getElementById('logContent');
             if (data.logs && data.logs.trim()) {
                 logEl.innerHTML = colorizeLog(data.logs);
