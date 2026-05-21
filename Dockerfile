@@ -109,7 +109,7 @@ RUN apt-get update && \
   \
   # 创建统一的启动包装脚本 (含 --disable-dev-shm-usage)
   echo '#!/bin/bash' > /usr/bin/google-chrome-stable && \
-  echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-dev-shm-usage --disable-gpu --no-default-browser-check --no-first-run --disable-extensions --disable-background-networking --disable-sync --disable-translate --disable-software-rasterizer --memory-pressure-off --js-flags="--max-old-space-size=256" "$@"' >> /usr/bin/google-chrome-stable && \
+  echo 'exec /usr/bin/google-chrome-stable.original --no-sandbox --disable-dev-shm-usage --disable-gpu --no-default-browser-check --no-first-run --disable-background-networking --disable-sync --disable-translate --disable-software-rasterizer --memory-pressure-off --js-flags="--max-old-space-size=256" "$@"' >> /usr/bin/google-chrome-stable && \
   chmod +x /usr/bin/google-chrome-stable && \
   \
   # Chrome 策略
