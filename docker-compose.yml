@@ -54,6 +54,7 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
       - ./scripts:/home/headless/.config/autokey/data/MyScripts    # autokey脚本文件目录
+      - ./google-chrome:/home/headless/.config/google-chrome       # 浏览器数据
     restart: unless-stopped
     shm_size: '2gb'
     healthcheck:
