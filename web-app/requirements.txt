@@ -10,3 +10,5 @@ python-telegram-bot>=20.7
 gunicorn>=22.0.0
 pytz
 pymysql
+PyAutoGUI
+Pillow
