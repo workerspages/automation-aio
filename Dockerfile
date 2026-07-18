@@ -48,7 +48,7 @@ RUN apt-get update && \
   # 1. 安装核心工具
   apt-get install -y --no-install-recommends \
   software-properties-common gpg-agent \
-  wget curl ca-certificates git \
+  wget curl ca-certificates git dos2unix \
   vim nano sudo tzdata locales net-tools openssh-client \
   iproute2 iputils-ping supervisor cron sqlite3 \
   # 2. 字体
