@@ -274,6 +274,7 @@ RUN mkdir -p /usr/share/novnc && \
 COPY web-app/requirements.txt /app/web-app/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
   pip install --no-cache-dir -r /app/web-app/requirements.txt && \
+  pip install --no-cache-dir pyautogui pillow requests && \
   rm -rf /root/.cache/pip
 
 # ===================================================================
