@@ -140,6 +140,13 @@ RUN apt-get update && \
   echo "headless ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers && \
   \
   # ============================================
+  # 修复 PaaS 环境 close_range EPERM 问题
+  # ============================================
+  echo '#include <errno.h>\nint close_range(unsigned int first, unsigned int last, unsigned int flags) {\n    errno = 38; /* ENOSYS */\n    return -1;\n}' > /tmp/close_range_hack.c && \
+  gcc -shared -fPIC -o /usr/local/lib/libcloserange.so /tmp/close_range_hack.c && \
+  rm /tmp/close_range_hack.c && \
+  \
+  # ============================================
   # 瘦身清理
   # ============================================
   apt-get remove -y --purge gcc g++ make python3-dev software-properties-common gpg-agent && \
@@ -244,6 +251,10 @@ eval $(dbus-launch --sh-syntax)
 export DBUS_SESSION_BUS_ADDRESS
 echo "export DBUS_SESSION_BUS_ADDRESS='$DBUS_SESSION_BUS_ADDRESS'" > $HOME/.dbus-env
 chmod 644 $HOME/.dbus-env
+
+# 注入 close_range hack 修复 PaaS 环境下的 Openbox 报错
+export LD_PRELOAD=/usr/local/lib/libcloserange.so
+
 # 纯色背景 (因为我们去掉了 pcmanfm --desktop，所以需要手动设置背景)
 xsetroot -solid "#333333" &
 xset s off &
