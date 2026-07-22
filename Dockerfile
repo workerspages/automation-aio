@@ -54,7 +54,7 @@ RUN apt-get update && \
   # 2. 字体
   fonts-wqy-microhei language-pack-zh-hans \
   # 3. X11 / VNC / Audio
-  x11-utils x11-xserver-utils xauth xserver-xorg-core xserver-xorg-video-dummy \
+  x11-utils xvfb x11-xserver-utils xauth xserver-xorg-core xserver-xorg-video-dummy \
   tigervnc-standalone-server tigervnc-common tigervnc-tools \
   libasound2 \
   # 4. Openbox 桌面环境
