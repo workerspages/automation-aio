@@ -286,6 +286,9 @@ COPY web-app/requirements.txt /app/web-app/
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
   pip install --no-cache-dir -r /app/web-app/requirements.txt && \
   rm -rf /root/.cache/pip
+# === 预下载 chromedriver 到 seleniumbase 包目录（构建期 root 下载；目录放权给运行期 headless 用户，UC patcher 需要改写文件） ===
+RUN sbase get chromedriver && \
+  chmod -R 777 /usr/local/lib/python3.10/dist-packages/seleniumbase/drivers
 
 # ===================================================================
 # 复制与配置
