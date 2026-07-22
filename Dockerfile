@@ -62,7 +62,7 @@ RUN apt-get update && \
   # 5. 剪贴板同步工具
   autocutsel \
   # 6. Python & 编译依赖
-  python3 python3-pip python3-dev python3-gi python3-xdg python3-websockify \
+  python3 python3-pip python3-dev python3-gi python3-xdg python3-websockify python3-tk \
   gir1.2-gtk-3.0 pkg-config gcc g++ make libffi-dev libssl-dev \
   # 7. 杂项工具
   xautomation xdotool kdialog imagemagick nginx nodejs npm unzip p7zip-full \
